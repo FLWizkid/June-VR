@@ -47,9 +47,14 @@ target hardware actually supports.
   code is in [`web-ar/image-tracking-phone.js`](web-ar/image-tracking-phone.js).
   Treat it as a phone‑only fallback, and use a *designed* high‑contrast marker,
   not the hands photo.
-- **For a production, native‑quality build:** Unity 6 + AR Foundation (or the
-  Jetpack XR SDK) gives the most robust tracking and the broadest Android XR
-  reach. See [`docs/platform-compatibility.md`](docs/platform-compatibility.md).
+- **★ Chosen path for Samsung/Google glasses (speed + reality): Unity 6 +
+  AR Foundation + the Android XR OpenXR provider.** It's the best balance of fast
+  iteration and visual fidelity, and Google co‑developed the integration. The
+  full scaffold (scripts, package manifest, and an exact Editor setup checklist)
+  is in **[`unity-android-xr/`](unity-android-xr/)**. Unreal has a higher fidelity
+  ceiling but is heavier/slower; native Jetpack XR is leanest at runtime but
+  slowest to build. See [`unity-android-xr/README.md`](unity-android-xr/README.md)
+  for the scored comparison.
 
 ### A) The model — get something genuinely "identical"
 Don't reconstruct the device live in the browser. Produce a clean **GLB** once,
@@ -84,7 +89,12 @@ Android XR.
 ## What's in here
 
 ```
-web-ar/
+unity-android-xr/            ★ RECOMMENDED for glasses (speed + reality)
+  README.md                  Why Unity, scored vs Unreal/Jetpack XR/WebXR
+  SETUP.md                   Exact Unity 6 Editor steps: packages, XR, URP, scene, build
+  Packages/manifest.json     AR Foundation 6 + Android XR OpenXR provider deps
+  Assets/Scripts/            Placement+anchor, light estimation, scene permission
+web-ar/                      Quick web demo / phone fallback
   index.html                 Runnable PlayCanvas WebXR app (loads engine from CDN)
   app.js                     Markerless placement: hit test + anchors (glasses-ready)
   image-tracking-phone.js    Corrected, phone-only image-tracking fallback (experimental)

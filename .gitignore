@@ -1,7 +1,29 @@
-# dependencies & build output
+# Dependencies
 node_modules/
+
+# Build output
 dist/
-# vite / misc
+
+# Vite / bundler cache
 .vite/
+node_modules/.vite/
+*.tsbuildinfo
+
+# Logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor / OS
 .DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Env
+.env
+.env.local
+.env.*.local

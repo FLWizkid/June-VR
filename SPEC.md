@@ -279,3 +279,11 @@ Runtime (requires WebXR device/browser — **cannot be verified in this environm
   keeps the artist materials. Pediatric/Large stay procedural until the fabric cuff lands. The
   `forest.exr` world HDRI and reference JPGs were absent and are not required (the app lights the
   scene itself).
+- **A12.** The real device is **shared across all three sizes** (`modelUrl` → the same GLB,
+  `modelScale = 1.0`); size variation comes from the **procedural fabric wrap** (`bladder` dims),
+  which is **composited** onto the device by `BloodPressureCuff` (gauge/tube/bulb from the GLB; wrap
+  + Velcro + label procedural). The wrap's position relative to the device is the single tunable
+  `WRAP_OFFSET` in `bloodPressureCuff.ts`. The GLB also carries the artist's **rolled-up cuff at the
+  back of the gauge**; the procedural wrap is the deployable training cuff until a real cuff mesh is
+  supplied. The procedural gauge needle is absent on the real device (static dial) — the gauge and
+  inflation controllers already null-guard `gaugeNeedle`, so the cycle drives the value without it.

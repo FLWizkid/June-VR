@@ -22,6 +22,14 @@ import { createLogger } from '../utils/logging';
 
 const log = createLogger('cuff');
 
+/**
+ * Where the procedural fabric wrap sits relative to the real gauge device in composite mode
+ * (metres, in the cuff's local space). Default lays it flat on the surface beside the device.
+ * This is the single knob to reposition the wrap. Note the device GLB also carries the artist's
+ * rolled-up cuff at the back of the gauge; this procedural wrap is the deployable training cuff.
+ */
+const WRAP_OFFSET = new pc.Vec3(0.22, 0, 0.02);
+
 export class BloodPressureCuff {
   /** Root entity; parent this under the world/anchor root. */
   readonly root: pc.Entity;
@@ -64,8 +72,11 @@ export class BloodPressureCuff {
   }
 
   /**
-   * Build the cuff for a given size. Tries a real model first (if the variant has one); otherwise
-   * builds the procedural placeholder. Must be awaited before use.
+   * Build the cuff for a given size.
+   *   - If the variant supplies a real device model, load it and COMPOSITE the procedural fabric arm
+   *     wrap on top (gauge/tube/bulb come from the GLB; the size-specific wrap is procedural).
+   *   - Otherwise build the full procedural placeholder (wrap + hardware) at the origin.
+   * Must be awaited before use.
    */
   async build(size: CuffSize): Promise<void> {
     this.size = size;
@@ -76,17 +87,21 @@ export class BloodPressureCuff {
     this.allMeshInstances.length = 0;
     this.needle = null;
 
+    let deviceLoaded = false;
     if (variant.modelUrl) {
-      const ok = await this.buildFromModel(variant);
-      if (ok) {
-        this.cacheMeshInstances();
-        this.aabbDirty = true;
-        return;
-      }
-      log.warn(`model load failed for ${size}; using procedural placeholder`);
+      deviceLoaded = await this.buildFromModel(variant);
+      if (!deviceLoaded) log.warn(`device model load failed for ${size}; using full procedural placeholder`);
     }
 
-    this.buildProcedural(variant);
+    if (deviceLoaded) {
+      // Composite: real gauge device + procedural, size-specific fabric arm wrap (offset beside it).
+      this.buildCuffWrap(variant, WRAP_OFFSET);
+    } else {
+      // Full procedural fallback (no real asset): wrap + hardware together at the origin.
+      this.buildCuffWrap(variant, null);
+      this.buildHardware(variant);
+    }
+
     this.cacheMeshInstances();
     this.aabbDirty = true;
   }
@@ -142,16 +157,23 @@ export class BloodPressureCuff {
   }
 
   /**
-   * PROCEDURAL PATH. Builds a readable BP cuff from primitives, sized from the variant.
-   * All units in meters.
+   * Procedural fabric arm wrap (body + Velcro + label), sized from the variant. In composite mode
+   * `offset` lays it on the surface beside the real device; in full-procedural mode `offset` is null
+   * so it sits at the origin alongside the procedural hardware. All units in meters.
    */
-  private buildProcedural(variant: CuffVariantSpec): void {
+  private buildCuffWrap(variant: CuffVariantSpec, offset: pc.Vec3 | null): void {
     const b = variant.bladder;
+    let parent: pc.Entity = this.root;
+    if (offset) {
+      parent = new pc.Entity('cuff-wrap');
+      parent.setLocalPosition(offset.x, offset.y, offset.z);
+      this.root.addChild(parent);
+    }
 
     // Cuff body: a flat curved-ish fabric slab. We model it as a thin box laid horizontally.
     const body = this.makeMeshEntity('cuff-body', this.boxMesh(b.width, b.thickness, b.height), 'fabric');
     body.setLocalPosition(0, b.thickness * 0.5, 0);
-    this.root.addChild(body);
+    parent.addChild(body);
     this.collectHighlight(body);
 
     // Velcro strip across one end of the body.
@@ -161,7 +183,7 @@ export class BloodPressureCuff {
       'velcroHook',
     );
     velcro.setLocalPosition(0, b.thickness + 0.001, b.height * 0.36);
-    this.root.addChild(velcro);
+    parent.addChild(velcro);
 
     // Printed label patch on top of the fabric.
     const label = this.makeMeshEntity(
@@ -170,7 +192,16 @@ export class BloodPressureCuff {
       'label',
     );
     label.setLocalPosition(0, b.thickness + 0.002, -b.height * 0.18);
-    this.root.addChild(label);
+    parent.addChild(label);
+  }
+
+  /**
+   * Procedural BP hardware (tubing, bulb, valve, aneroid gauge with a live needle). Used only in the
+   * full-procedural fallback; in composite mode the real GLB supplies the hardware instead.
+   * All units in meters.
+   */
+  private buildHardware(variant: CuffVariantSpec): void {
+    const b = variant.bladder;
 
     // Rubber tubing: a short torus arc leaving the bladder, then a straight segment to the bulb.
     const tubeRadius = 0.004;

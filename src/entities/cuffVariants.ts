@@ -1,9 +1,11 @@
 /**
  * Cuff size variants (SPEC: pediatric/small, medium, large). ASSET_PIPELINE §12.
  *
- * Variants are data. By default they describe scale + label differences applied to the shared
- * procedural model. When a real model is supplied, fill `modelUrl` (single model + scale, or one
- * URL per size) at the TODO markers — the entity builder consumes either path unchanged.
+ * Variants are data. The shared real device GLB (the aneroid gauge + tube + bulb) is the same for
+ * every size — `modelUrl` points all sizes at it and `modelScale` stays 1.0 (the gauge is one
+ * physical size). What varies per size is the procedural fabric arm WRAP, driven by `bladder` below
+ * and composited onto the device by the entity builder. Drop a real per-size cuff mesh in later by
+ * pointing `modelUrl` at distinct files (the builder consumes either path unchanged).
  */
 
 import { cmToMeters } from '../utils/units';
@@ -20,6 +22,9 @@ export const CUFF_SIZE_ORDER: readonly CuffSize[] = [
   CuffSize.Large,
 ] as const;
 
+/** Shared real device model (gauge head + coiled tube + inflation bulb). Same for all sizes. */
+const DEVICE_MODEL_URL = 'assets/models/blood_pressure_device.glb';
+
 export interface CuffVariantSpec {
   readonly size: CuffSize;
   readonly label: string;
@@ -30,13 +35,14 @@ export interface CuffVariantSpec {
   /** Bladder body dimensions in meters (width = along arm, height = around arm wrap, used by mesh). */
   readonly bladder: { readonly width: number; readonly height: number; readonly thickness: number };
   /**
-   * Uniform scale applied to the shared model for this size (used in the single-model strategy).
-   * 1.0 = author size (medium).
+   * Uniform scale applied to the loaded `modelUrl`. For the shared device this stays 1.0 (one
+   * physical gauge); size differences live in `bladder` (the procedural wrap), not here.
    */
   readonly modelScale: number;
   /**
-   * Optional per-size model URL. Null = use the shared/procedural model + `modelScale`.
-   * TODO(real-assets): set to e.g. 'assets/models/cuff_large.glb' if shipping distinct meshes.
+   * Model to load for this size. All sizes share the real device GLB; the size-specific fabric wrap
+   * is composited procedurally on top. TODO(real-assets): point at a distinct per-size cuff mesh if
+   * one is delivered (e.g. 'assets/models/cuff_large.glb').
    */
   readonly modelUrl: string | null;
 }
@@ -48,8 +54,8 @@ const VARIANTS: Record<CuffSize, CuffVariantSpec> = {
     armCircumferenceText: '12 - 19 cm',
     circumferenceRange: { min: cmToMeters(12), max: cmToMeters(19) },
     bladder: { width: cmToMeters(8), height: cmToMeters(15), thickness: cmToMeters(2.0) },
-    modelScale: 0.72,
-    modelUrl: null, // TODO(real-assets): optional 'assets/models/cuff_small.glb'
+    modelScale: 1.0,
+    modelUrl: DEVICE_MODEL_URL,
   },
   [CuffSize.Medium]: {
     size: CuffSize.Medium,
@@ -58,12 +64,7 @@ const VARIANTS: Record<CuffSize, CuffVariantSpec> = {
     circumferenceRange: { min: cmToMeters(22), max: cmToMeters(32) },
     bladder: { width: cmToMeters(13), height: cmToMeters(24), thickness: cmToMeters(2.4) },
     modelScale: 1.0,
-    // Real artist asset: aneroid gauge head + coiled tube + inflation bulb (the BP "device"),
-    // exported Blender 2.91 -> GLB (real-world metres, dial texture baked, ~2.4 MB). Its own PBR
-    // material names (Glass/Plastic_Grey/Matte_Black/Screen) don't collide with the cuff slot names,
-    // so buildFromModel keeps the artist materials. NOTE: this is the gauge/bulb unit only — the
-    // fabric arm cuff is a separate asset to be composed in later (see SPEC §12 assumptions).
-    modelUrl: 'assets/models/blood_pressure_device.glb',
+    modelUrl: DEVICE_MODEL_URL,
   },
   [CuffSize.Large]: {
     size: CuffSize.Large,
@@ -71,8 +72,8 @@ const VARIANTS: Record<CuffSize, CuffVariantSpec> = {
     armCircumferenceText: '32 - 43 cm',
     circumferenceRange: { min: cmToMeters(32), max: cmToMeters(43) },
     bladder: { width: cmToMeters(16), height: cmToMeters(30), thickness: cmToMeters(2.8) },
-    modelScale: 1.28,
-    modelUrl: null, // TODO(real-assets): optional 'assets/models/cuff_large.glb'
+    modelScale: 1.0,
+    modelUrl: DEVICE_MODEL_URL,
   },
 };
 

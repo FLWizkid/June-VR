@@ -58,7 +58,12 @@ const VARIANTS: Record<CuffSize, CuffVariantSpec> = {
     circumferenceRange: { min: cmToMeters(22), max: cmToMeters(32) },
     bladder: { width: cmToMeters(13), height: cmToMeters(24), thickness: cmToMeters(2.4) },
     modelScale: 1.0,
-    modelUrl: null, // TODO(real-assets): 'assets/models/cuff_medium.glb' (primary source model)
+    // Real artist asset: aneroid gauge head + coiled tube + inflation bulb (the BP "device"),
+    // exported Blender 2.91 -> GLB (real-world metres, dial texture baked, ~2.4 MB). Its own PBR
+    // material names (Glass/Plastic_Grey/Matte_Black/Screen) don't collide with the cuff slot names,
+    // so buildFromModel keeps the artist materials. NOTE: this is the gauge/bulb unit only — the
+    // fabric arm cuff is a separate asset to be composed in later (see SPEC §12 assumptions).
+    modelUrl: 'assets/models/blood_pressure_device.glb',
   },
   [CuffSize.Large]: {
     size: CuffSize.Large,

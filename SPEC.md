@@ -267,3 +267,15 @@ Runtime (requires WebXR device/browser — **cannot be verified in this environm
   `app.xr.supportedFrameRates` and request the highest, falling back silently if unsupported.
 - **A10.** "Comet" is treated as a Chromium-class WebXR browser; same capability gates apply, no
   Comet-specific code.
+- **A11.** The supplied artist asset (`Blood Pressure.blend`, Blender 2.91) is the **aneroid gauge
+  head + coiled tube + inflation bulb** — *not* the fabric arm cuff (a separate asset, still pending
+  from the artist's other format folders). It was converted headlessly (bpy 5.0): default cube /
+  camera / light stripped; it was modelled in **millimetres** (scene `scale_length = 0.001`), so the
+  geometry was baked ×0.001 to real metres (~0.185 × 0.40 × 0.049 m); the 2560² `Screen clock.tif`
+  dial was relinked and resized to 1024 (gltf-transform), giving `public/assets/models/
+  blood_pressure_device.glb` (~2.4 MB, 43k tris, geometry **uncompressed** so no Draco/KTX2 decoder
+  set-up is required). It is wired as the **Medium** variant's `modelUrl`; its PBR material names
+  (Glass/Plastic_Grey/Matte_Black/Screen) don't collide with the cuff slot names, so `buildFromModel`
+  keeps the artist materials. Pediatric/Large stay procedural until the fabric cuff lands. The
+  `forest.exr` world HDRI and reference JPGs were absent and are not required (the app lights the
+  scene itself).

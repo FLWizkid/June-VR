@@ -55,9 +55,28 @@ The running app (`src/main.ts` → `core/app.ts`) is responsible for:
 - Starting/ending the **WebXR session on user gesture** with capability-gated features.
 - Running the **interaction layer** actually selected (hands → ray → place/inspect).
 - Driving **light estimation** into the key light; running the **performance monitor**.
-- Rendering the **cuff** (placeholder or real) with size variants and inspection mode.
+- Rendering the **cuff** (real device GLB + procedural fabric wrap) with size variants and inspection.
+- Driving the **procedural training animation** (wrap tighten, bladder swell, pickup settle) and the
+  **procedure state machine** (guided/placement/inspection/demonstration), surfaced in the Training
+  panel. The inflation cycle has a **single owner** (ticked once/frame); the animator only reads it.
+- Compositing the **environment stand-in** (preview only) under the world root and **hiding it in AR**
+  (optical see-through — no floor/backdrop painted over the real world).
 
 No build tools, asset compression, or Unity run inside the app.
+
+## How the assets are found + connected
+
+- **Cuff device (detected):** `public/assets/models/blood_pressure_device.glb` is referenced by
+  `entities/cuffVariants.ts` (`DEVICE_MODEL_URL`, all three sizes, `modelScale 1.0`), loaded via
+  `core/assetRegistry.ts → loadContainer`, and composited with a procedural fabric wrap by
+  `entities/bloodPressureCuff.ts`. Materials bind by slot name (`materials/cuffMaterials.ts`).
+- **Environment (NOT detected → seam + stand-in):** `entities/environmentRoot.ts` tries
+  `assets/env/training_room.glb`; if absent it builds a procedural floor/grid/backdrop **for non-AR
+  preview only**, and `scene/trainingScene.ts` mounts it under the world root with a transform
+  independent of the cuff. It is **disabled whenever an XR/AR session is active**. Drop a real env GLB
+  at that path to replace the stand-in with no code change.
+- **Source animations (none):** all training motion is procedural (`animation/`). There is nothing to
+  import; replacing it would mean adding clips and is out of scope for v1.
 
 ---
 
@@ -116,6 +135,12 @@ No PlayCanvas Editor, account, or cloud project is required — this is **standa
 7. **Fallback checks:** if hands are unavailable the app should switch to **ray** selection; with no
    usable ray it should switch to **place/inspect** (orbit/zoom). Confirm no crash on transitions.
 8. **Close-up:** bring the cuff to ~6–12 inches; verify materials/labels stay crisp (inspection mode).
+8a. **Training:** in the **Training** panel pick **Guided** and walk the steps (select size → inspect
+    → orient → position → confirm fit → inflate → observe gauge). Confirm the step header/instruction
+    update, the progress bar fills, the green **target marker** appears on the position step, the
+    bladder firms and the needle rises on inflate, and corrective hints show for loose/over-tight fit
+    or fast deflation. Try **Demo** for a hands-off walkthrough and **Placement** for the placement
+    subset. (Clinical values are placeholders pending SME review — see `TRAINING_LOGIC.md` §7.)
 9. **Lighting:** move between bright/dim areas; with light estimation available the cuff’s key light
    should track real lighting and stay readable.
 10. **Performance:** watch for stable frame rate; the status panel exposes the active quality profile

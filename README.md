@@ -2,13 +2,21 @@
 
 Production-grade **optical see-through AR** blood pressure cuff for **training-grade medical
 visualization**, built for first-edition **Android XR glasses** (Chrome / Comet). The cuff is
-rendered with realistic PBR materials and can be placed, grabbed, and inspected up close.
+rendered with realistic PBR materials and can be placed, grabbed, and inspected up close, and a
+**guided nurse-training sequence** (procedural animation + a step-by-step state machine) teaches
+sizing, orientation, placement, fit, inflation, and gauge reading.
 
 **Stack:** PlayCanvas (standalone) · TypeScript (strict) · ES modules · Vite. **No Unity anywhere.**
 
-See also: [`SPEC.md`](./SPEC.md) (authoritative spec), [`RUNBOOK.md`](./RUNBOOK.md) (ops),
+See also: [`SPEC.md`](./SPEC.md) (authoritative spec), [`TRAINING_LOGIC.md`](./TRAINING_LOGIC.md)
+(training design + **SME-review list**), [`RUNBOOK.md`](./RUNBOOK.md) (ops),
 [`ASSET_PIPELINE.md`](./ASSET_PIPELINE.md) (assets), [`CLAUDE.md`](./CLAUDE.md) (rules for future
 Claude Code sessions).
+
+> **Clinical honesty:** the training logic is a **simulator scaffold built for SME validation**, not
+> a validated curriculum. Visual realism and procedure correctness are kept separate; every clinical
+> assumption is flagged `SME-REVIEW:` in code and listed in `TRAINING_LOGIC.md` §7. Do not treat any
+> clinical value as authoritative until a nurse-educator / clinical SME signs off.
 
 ---
 
@@ -93,29 +101,46 @@ The app checks `window.isSecureContext` and the availability of immersive-AR bef
 
 ---
 
-## Exact user files still needed
+## Assets: detected vs. NOT detected
 
-The app runs **now** with procedural placeholders. To reach final realism, supply (drop into the
-listed folders; names are what the code's seam expects — see `TODO:` markers in
-`src/materials/textureSets.ts` and `src/entities/cuffVariants.ts`):
+**Detected (wired, in the repo):**
+- `public/assets/models/blood_pressure_device.glb` — the real aneroid device (gauge head + coiled
+  tube + inflation bulb), static (no animations), real metres. Wired as the model for **all three
+  sizes** in `entities/cuffVariants.ts`; composited with a procedural fabric wrap by
+  `entities/bloodPressureCuff.ts`. (See `SPEC.md` §12 A11/A12.)
 
-**Model** → `public/assets/models/`
-- `cuff_medium.glb` (required; single source model, metallic-roughness, meters, +Y up / −Z fwd,
-  material slots named per `ASSET_PIPELINE.md` §5). Optionally `cuff_small.glb`, `cuff_large.glb`
-  if sizes differ in shape rather than scale.
+**NOT detected (seam + stand-in in place):**
+- **Environment** (`public/assets/env/` empty) → `entities/environmentRoot.ts` builds a **minimal
+  procedural stand-in** (floor + grid + backdrop) for **non-AR preview only**, and is **hidden in
+  AR**. Drop `assets/env/training_room.glb` to replace it (no code change). (`SPEC.md` §12 A13.)
+- **Source animations** (none anywhere) → **all training motion is procedural** (`animation/`).
+  (`SPEC.md` §12 A14.)
+- **Optional IBL** (`assets/env/env_atlas.ktx2`) and the **per-surface texture sets** below are not
+  present; materials run on procedural defaults.
+
+To reach final realism, supply (names are what the code's seam expects — see `TODO:` markers in
+`src/materials/textureSets.ts`, `src/entities/cuffVariants.ts`, `src/entities/environmentRoot.ts`):
 
 **Textures** → `public/assets/textures/` (KTX2 preferred; PNG accepted)
 - `fabric_albedo.*`, `fabric_normal.*`, `fabric_orm.*`
 - `velcro_albedo.*`, `velcro_normal.*`, `velcro_orm.*`
 - `tube_albedo.*`, `tube_normal.*`, `tube_orm.*`
-- `gauge_dial.*`, `label_albedo.*`
-- (ORM = R:AO, G:Roughness, B:Metalness)
+- `gauge_dial.*`, `label_albedo.*`  (ORM = R:AO, G:Roughness, B:Metalness)
 
 **Environment (optional)** → `public/assets/env/`
-- `env.hdr` or prefiltered `env_atlas.ktx2` for image-based lighting.
+- `training_room.glb` (preview-only environment), and/or `env.hdr` / `env_atlas.ktx2` for IBL.
+- A real **patient arm / manikin** mesh (optional) could replace the placement **target-pose** seam.
 
 **Not needed:** any marker/QR/image-tracking images (WebXR image tracking is unsupported on
 Android XR).
+
+## What still needs SME (clinical) review
+
+The procedure logic is structured for validation, not asserted as correct. See `TRAINING_LOGIC.md`
+§7 for the full list; highlights: target inflation pressure, controlled deflation rate, demo
+systolic/diastolic markers, the "correct" demo cuff size, fit/orientation/position tolerances, and
+all step wording/ordering. All are centralized in `src/config/trainingConfig.ts` and flagged
+`SME-REVIEW:`.
 
 ---
 
@@ -141,19 +166,28 @@ asset-agnostic and remain unchanged.
 ## Project layout (high level)
 
 ```
-public/assets/{models,textures,env,tracking,ui}   static assets (tracking/ unused in v1)
+public/assets/{models,textures,env,tracking,ui,training}   static assets (tracking/ unused in v1)
 src/
   main.ts                       entry
-  config/                       appConfig, qualityProfiles, capabilities
+  config/                       appConfig, qualityProfiles, capabilities, trainingConfig
   core/                         app, assetRegistry, sceneFactory, xrBootstrap, perf, materialFactory, featureFlags
   ar/                           sessionManager, handTracking, gestureInterpreter, rayInteraction, hitTestPlacement, anchors, fallbackModes
-  scene/                        lightingRig, environment, cuffScene, debugScene
-  entities/                     bloodPressureCuff, cuffVariants
+  scene/                        lightingRig, environment, cuffScene, trainingScene, debugScene
+  entities/                     bloodPressureCuff, cuffVariants, environmentRoot
   materials/                    cuffMaterials, textureSets
-  interaction/                  grab, inspection, placement, inflation, gauge controllers
-  ui/                           overlay, statusPanel, loadingScreen, qualityPanel, arEntryButton, unsupportedMessage
+  animation/                    cuffAnimator, timelineController, proceduralMotion
+  interaction/                  grab, inspection, placement, inflation, gauge, trainingStep controllers
+  training/                     procedureStateMachine, stepDefinitions, validationRules, instructionalPrompts, errorStates
+  ui/                           overlay, statusPanel, loadingScreen, qualityPanel, arEntryButton, unsupportedMessage, trainingPanel
   utils/                        logging, math, units, profiling
 ```
+
+### Training controls (UI)
+
+The **Training** panel (top-left) selects the mode (**Guided / Placement / Inspect / Demo**) and
+shows the current step, instruction, a progress bar, and corrective guidance, with **Next** /
+**Restart**. The **Controls** panel (bottom-left) still cycles quality tier, cuff size, and triggers
+an inflation cycle.
 
 License/owner: internal training tool. Continue development with Claude Code per
 [`CLAUDE.md`](./CLAUDE.md).

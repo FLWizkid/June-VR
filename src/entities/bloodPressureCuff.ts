@@ -18,6 +18,7 @@ import * as pc from 'playcanvas';
 import { CuffMaterialLibrary, type CuffMaterialId } from '../materials/cuffMaterials';
 import { CuffSize, getVariant, type CuffVariantSpec } from './cuffVariants';
 import type { AssetRegistry } from '../core/assetRegistry';
+import { tmp } from '../utils/math';
 import { createLogger } from '../utils/logging';
 
 const log = createLogger('cuff');
@@ -40,6 +41,15 @@ export class BloodPressureCuff {
 
   /** Sub-entity that holds the gauge needle (rotated by the gauge controller). */
   private needle: pc.Entity | null = null;
+  /**
+   * The procedural fabric wrap node (body + Velcro + label). Exposed (read-only intent) so the
+   * cuff animator can drive wrap/tighten/swell without forking a second cuff. Null until built.
+   */
+  private wrapNode: pc.Entity | null = null;
+  /** The fabric body sub-entity inside the wrap (scaled to suggest bladder swell on inflation). */
+  private wrapBody: pc.Entity | null = null;
+  /** Base local scale of the wrap body, captured at build time so swell is relative + reversible. */
+  private readonly wrapBodyBaseScale = new pc.Vec3(1, 1, 1);
   /** Mesh instances that should receive the hover highlight (the fabric/body). */
   private readonly highlightTargets: pc.MeshInstance[] = [];
   /**
@@ -67,6 +77,14 @@ export class BloodPressureCuff {
     return this.needle;
   }
 
+  /**
+   * The procedural fabric wrap node, for the animator to translate/rotate during the wrap/position
+   * training motion. Null until built; null is safe (animator guards it).
+   */
+  get wrap(): pc.Entity | null {
+    return this.wrapNode;
+  }
+
   get currentSize(): CuffSize {
     return this.size;
   }
@@ -86,6 +104,9 @@ export class BloodPressureCuff {
     this.highlightTargets.length = 0;
     this.allMeshInstances.length = 0;
     this.needle = null;
+    this.wrapNode = null;
+    this.wrapBody = null;
+    this.wrapBodyBaseScale.set(1, 1, 1);
 
     let deviceLoaded = false;
     if (variant.modelUrl) {
@@ -163,18 +184,21 @@ export class BloodPressureCuff {
    */
   private buildCuffWrap(variant: CuffVariantSpec, offset: pc.Vec3 | null): void {
     const b = variant.bladder;
-    let parent: pc.Entity = this.root;
-    if (offset) {
-      parent = new pc.Entity('cuff-wrap');
-      parent.setLocalPosition(offset.x, offset.y, offset.z);
-      this.root.addChild(parent);
-    }
+    // Always create a dedicated wrap node so the animator has a stable handle to drive (wrap/tighten/
+    // position), in BOTH composite and full-procedural modes. At `offset` beside the device when
+    // compositing; at the origin otherwise.
+    const parent = new pc.Entity('cuff-wrap');
+    if (offset) parent.setLocalPosition(offset.x, offset.y, offset.z);
+    this.root.addChild(parent);
+    this.wrapNode = parent;
 
     // Cuff body: a flat curved-ish fabric slab. We model it as a thin box laid horizontally.
     const body = this.makeMeshEntity('cuff-body', this.boxMesh(b.width, b.thickness, b.height), 'fabric');
     body.setLocalPosition(0, b.thickness * 0.5, 0);
     parent.addChild(body);
     this.collectHighlight(body);
+    this.wrapBody = body;
+    this.wrapBodyBaseScale.copy(body.getLocalScale());
 
     // Velcro strip across one end of the body.
     const velcro = this.makeMeshEntity(
@@ -322,6 +346,27 @@ export class BloodPressureCuff {
       }
       mat.update();
     }
+  }
+
+  /**
+   * Suggest bladder inflation by swelling the fabric body's thickness (local Y) about its base
+   * scale. `fraction` in [0,1] (0 = resting, 1 = fully inflated). Allocation-free; reuses a scratch.
+   * Driven by the cuff animator from the inflation pressure. No-op if the wrap body is absent.
+   */
+  setBladderSwell(fraction: number): void {
+    const body = this.wrapBody;
+    if (!body) return;
+    const f = fraction < 0 ? 0 : fraction > 1 ? 1 : fraction;
+    // Up to +45% thickness at full inflation; width/length barely change (training-plausible).
+    const sy = 1 + 0.45 * f;
+    const sxz = 1 + 0.03 * f;
+    tmp.vecA.set(
+      this.wrapBodyBaseScale.x * sxz,
+      this.wrapBodyBaseScale.y * sy,
+      this.wrapBodyBaseScale.z * sxz,
+    );
+    body.setLocalScale(tmp.vecA.x, tmp.vecA.y, tmp.vecA.z);
+    this.aabbDirty = true;
   }
 
   // --- primitive + entity helpers ---

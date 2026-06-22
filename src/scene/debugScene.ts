@@ -37,6 +37,31 @@ export function createReticle(device: pc.GraphicsDevice): pc.Entity {
   return entity;
 }
 
+/**
+ * Build a translucent "target" marker (flat disc + ring) showing where the learner should position
+ * the cuff during the placement step. Functional training UI, kept subtle for the additive display.
+ * Disabled by default; the training controller toggles it.
+ */
+export function createTargetMarker(device: pc.GraphicsDevice): pc.Entity {
+  const entity = new pc.Entity('placement-target');
+
+  const ringMesh = pc.createTorus(device, { tubeRadius: 0.005, ringRadius: 0.08, sectorAngle: 360 });
+  const ringMat = createPbrMaterial({
+    diffuse: new pc.Color(0.45, 1.0, 0.6),
+    metalness: 0,
+    roughness: 0.5,
+    opacity: 0.5,
+  });
+  ringMat.emissive.set(0.1, 0.25, 0.14);
+  ringMat.update();
+  const ring = new pc.Entity('target-ring');
+  ring.addComponent('render', { meshInstances: [new pc.MeshInstance(ringMesh, ringMat)] });
+  ring.setLocalEulerAngles(90, 0, 0);
+  entity.addChild(ring);
+
+  return entity;
+}
+
 /** Compact multi-line capability/interaction summary for the status panel + debug output. */
 export function formatCapabilityDebug(
   env: EnvironmentCapabilities | null,

@@ -29,7 +29,7 @@ import { CuffMaterialLibrary } from '../materials/cuffMaterials';
 import { TextureSetProvider } from '../materials/textureSets';
 import { LightingRig } from '../scene/lightingRig';
 import { Environment } from '../scene/environment';
-import { CuffScene } from '../scene/cuffScene';
+import { TrainingScene } from '../scene/trainingScene';
 import { formatCapabilityDebug } from '../scene/debugScene';
 import { selectInteractionLayer, describeLayer } from '../ar/fallbackModes';
 import { CuffSize } from '../entities/cuffVariants';
@@ -39,6 +39,7 @@ import { ArEntryButton } from '../ui/arEntryButton';
 import { UnsupportedMessage, reasonForUnsupported } from '../ui/unsupportedMessage';
 import { StatusPanel } from '../ui/statusPanel';
 import { QualityPanel } from '../ui/qualityPanel';
+import { TrainingPanel } from '../ui/trainingPanel';
 
 import { createLogger } from '../utils/logging';
 
@@ -56,7 +57,7 @@ export class ARCuffApplication {
   private readonly materials: CuffMaterialLibrary;
   private readonly lighting: LightingRig;
   private readonly environment: Environment;
-  private cuffScene: CuffScene | null = null;
+  private trainingScene: TrainingScene | null = null;
 
   // UI
   private readonly loading: LoadingScreen;
@@ -64,9 +65,15 @@ export class ARCuffApplication {
   private readonly unsupported: UnsupportedMessage;
   private readonly statusPanel: StatusPanel;
   private readonly qualityPanel: QualityPanel;
+  private readonly trainingPanel: TrainingPanel;
 
   private env: EnvironmentCapabilities | null = null;
   private startTime = 0;
+
+  /** Convenience accessor: the cuff sub-scene inside the training scene (null until built). */
+  private get cuffScene() {
+    return this.trainingScene ? this.trainingScene.cuffScene : null;
+  }
 
   constructor(canvas: HTMLCanvasElement) {
     // Create the Application. It builds a WebGL2 graphics device and registers component systems.
@@ -100,6 +107,7 @@ export class ARCuffApplication {
     this.unsupported = new UnsupportedMessage();
     this.statusPanel = new StatusPanel();
     this.qualityPanel = new QualityPanel();
+    this.trainingPanel = new TrainingPanel();
 
     this.flags.setQualityTier(this.perf.currentTier);
   }
@@ -123,9 +131,9 @@ export class ARCuffApplication {
     this.environment.configure();
     this.environment.setArMode(false);
 
-    // 4) Build the cuff scene.
-    this.loading.setMessage('Assembling cuff...');
-    this.cuffScene = new CuffScene({
+    // 4) Build the training scene (environment stand-in + cuff + controllers in one hierarchy).
+    this.loading.setMessage('Assembling training scene...');
+    this.trainingScene = new TrainingScene({
       app: this.app,
       device: this.app.graphicsDevice,
       camera: this.roots.camera,
@@ -133,9 +141,10 @@ export class ARCuffApplication {
       materials: this.materials,
       assets: this.assets,
     });
-    await this.cuffScene.initialize(CuffSize.Medium);
-    this.cuffScene.applyProfile(getProfile(this.perf.currentTier));
-    this.cuffScene.setOnInputChange(() => this.reselectInteractionLayer());
+    await this.trainingScene.initialize(CuffSize.Medium);
+    this.trainingScene.applyProfile(getProfile(this.perf.currentTier));
+    this.trainingScene.setArMode(false); // show env stand-in in preview
+    this.trainingScene.cuffScene.setOnInputChange(() => this.reselectInteractionLayer());
 
     // 5) Wire UI handlers + XR lifecycle.
     this.wireUi();
@@ -246,6 +255,14 @@ export class ARCuffApplication {
       },
     });
 
+    // Training panel: mode/next/restart wired to the training layer; status pushed from the machine.
+    this.trainingPanel.setHandlers({
+      onMode: (mode) => this.cuffScene?.setTrainingMode(mode),
+      onNext: () => this.cuffScene?.trainingNext(),
+      onRestart: () => this.cuffScene?.trainingRestart(),
+    });
+    this.cuffScene?.onTrainingStatus((status) => this.trainingPanel.setStatus(status));
+
     // Desktop inspect input: drag to orbit, wheel to zoom (only meaningful out of AR).
     this.wireDesktopInspectInput();
   }
@@ -293,6 +310,7 @@ export class ARCuffApplication {
       log.info('XR session started');
       setArMode(this.roots, true);
       this.environment.setArMode(true);
+      this.trainingScene?.setArMode(true); // hide env stand-in (optical see-through)
       this.flags.setSessionActive(true);
       this.arButton.setInSession(true);
       this.unsupported.hide();
@@ -304,6 +322,7 @@ export class ARCuffApplication {
       log.info('XR session ended');
       setArMode(this.roots, false);
       this.environment.setArMode(false);
+      this.trainingScene?.setArMode(false); // restore env stand-in in preview
       this.lighting.resetToDefaults();
       this.flags.setSessionActive(false);
       this.arButton.setInSession(false);

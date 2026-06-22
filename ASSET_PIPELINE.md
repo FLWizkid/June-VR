@@ -21,10 +21,17 @@ XR-optimized** assets, and how that maps onto the code's material/variant seams.
 | Printed label / dial art | `*_label_albedo.png`, `gauge_dial.png` | `public/assets/textures/` | Recommended |
 | Reference photos | any (`.jpg/.png`) | not shipped; used for tuning only | Optional |
 | Environment lighting (IBL) | `env.hdr` or prefiltered `env_atlas.ktx2` | `public/assets/env/` | Optional |
+| Environment scene (preview only) | `training_room.glb` | `public/assets/env/` | Optional |
 
 **Final required filenames** (what the code's seam expects when you flip from placeholder to real)
-are listed in `README.md` → "Exact user files still needed" and mirrored by `TODO:` markers in
-`src/materials/textureSets.ts` and `src/entities/cuffVariants.ts`.
+are listed in `README.md` → "Assets: detected vs. NOT detected" and mirrored by `TODO:` markers in
+`src/materials/textureSets.ts`, `src/entities/cuffVariants.ts`, and `src/entities/environmentRoot.ts`.
+
+**Environment GLB seam (`assets/env/training_room.glb`).** Loaded by `entities/environmentRoot.ts`
+when present, replacing the procedural floor/grid stand-in. It is **preview-only**: the entire
+environment root is **disabled while an XR/AR session is active** (optical see-through must not paint
+over the real world). Model it in **metres**, +Y up / −Z forward, keep it modest (it is secondary to
+the cuff in the perf budget), and keep its origin at the floor so the cuff rests on it in preview.
 
 Not required (v1): any **marker/image-tracking** images — WebXR image tracking is **unsupported** on
 Android XR, so none are shipped. `public/assets/tracking/` stays empty.

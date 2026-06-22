@@ -25,11 +25,24 @@ This file governs how Claude Code (and any agent/dev) extends this project. Read
    per-controller private temporaries). This is enforced by review — keep hot paths allocation-free.
 7. **Document assumptions.** When something is unknown, **assume + continue** (don't block), and
    record the assumption in `SPEC.md` §12 and inline where relevant.
-8. **Run build checks before stopping.** Both must pass and you should not stop until they do:
-   ```bash
-   npm run build       # tsc --noEmit && vite build
-   npx tsc --noEmit    # strict typecheck
-   ```
+8. **Preserve training-logic integrity & clinical honesty.** Keep **visual realism** and **procedure
+   correctness** separate: the training "brain" (`training/`) stays **engine-free**, and all
+   clinically-meaningful values stay centralized in `config/trainingConfig.ts`. **Do not assert
+   unverified clinical claims** — every clinical assumption is flagged `SME-REVIEW:` in code and
+   listed in `TRAINING_LOGIC.md` §7. New clinical logic must be reviewable without reading 3D/WebXR
+   code, and added review items must be appended there.
+9. **Drive the EXISTING cuff; never fork a second one.** The animation/training layer drives the
+   existing `BloodPressureCuff` + its controllers through `CuffScene`. The inflation cycle has a
+   single owner (ticked once/frame); animators **read** pressure, they don't re-advance it.
+10. **Environment is preview-only.** `entities/environmentRoot.ts` (env GLB seam + procedural
+    stand-in) is **disabled while an XR/AR session is active** (optical see-through — no
+    floor/backdrop over the real world) and only shown in non-AR preview; its transform is
+    independent of the cuff.
+11. **Run build checks before stopping.** Both must pass and you should not stop until they do:
+    ```bash
+    npm run build       # tsc --noEmit && vite build
+    npx tsc --noEmit    # strict typecheck
+    ```
 
 ## WebXR / capability rules
 
@@ -46,8 +59,9 @@ This file governs how Claude Code (and any agent/dev) extends this project. Read
 ## Asset rules
 
 - Real assets replace procedural placeholders **only** through the documented seam
-  (`materials/textureSets.ts`, `entities/cuffVariants.ts`, `public/assets/...`). Follow
-  `ASSET_PIPELINE.md` (meters; +Y up / −Z fwd; metalness workflow; ORM packing; material slot names).
+  (`materials/textureSets.ts`, `entities/cuffVariants.ts`, **`entities/environmentRoot.ts`**,
+  `public/assets/...`). Follow `ASSET_PIPELINE.md` (meters; +Y up / −Z fwd; metalness workflow; ORM
+  packing; material slot names). The environment GLB seam is `assets/env/training_room.glb`.
 - Put `TODO:` markers **only** where a real asset file is genuinely required — not on architecture.
 
 ## Definition of done for a change
@@ -55,4 +69,8 @@ This file governs how Claude Code (and any agent/dev) extends this project. Read
 - Strict `tsc --noEmit` clean; `npm run build` succeeds.
 - No new runtime deps; no per-frame allocations introduced.
 - Cuff realism preserved; XR features still gated with fallbacks; `app.xr` still null-guarded.
+- **Training-logic integrity preserved**: `training/` stays engine-free; clinical values stay in
+  `config/trainingConfig.ts` and flagged `SME-REVIEW:`; new clinical assumptions appended to
+  `TRAINING_LOGIC.md` §7. No second cuff forked; inflation has a single owner.
+- **Environment hidden in AR** (preview-only), transform independent of the cuff.
 - New assumptions recorded in `SPEC.md`. Docs updated if behavior/commands changed.

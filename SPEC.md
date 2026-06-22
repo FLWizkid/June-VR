@@ -132,6 +132,28 @@ on physical surfaces; no bloom/glow.
 
 ---
 
+## 6.5 Training, Animation & Environment (this extension)
+
+The cuff and the BP teaching content are combined into **one AR training experience** (`scene/
+trainingScene.ts`): the **existing** cuff (with its grab/inspection/placement/inflation/gauge
+controllers) plus an **environment seam** mounted under the same world root with an **independent
+transform**, hidden in AR (optical see-through — never paint over the real world). Full design lives
+in **`TRAINING_LOGIC.md`**; key points:
+
+- **Procedural motion only** (no baked clips): `animation/` drives the existing cuff — wrap
+  translate/tighten, bladder swell from pressure, subtle pickup settle + idle bob, and a hands-off
+  **Demonstration timeline**. Conservative, AR-legible ranges; no game-like motion.
+- **Procedure state machine** (`training/`): an **engine-free** brain consuming a plain observation
+  and emitting prompts/step events. Modes: **guided, placement, inspection, demonstration**. Steps:
+  select size → inspect → orient → position → confirm fit → inflate → observe gauge → complete, each
+  with an observable success condition and non-blocking corrective feedback.
+- **Realism vs. correctness are separated:** realism is in materials/animation; correctness is in
+  editable, **`SME-REVIEW:`-flagged** logic centralized in `config/trainingConfig.ts`. **No
+  unverified clinical claim is asserted** — see `TRAINING_LOGIC.md` §7 for the SME validation list.
+- **Reuse, not fork:** the training/animation layer drives the **existing** `BloodPressureCuff` and
+  its controllers via the existing `CuffScene`; the inflation cycle has a **single owner** (ticked
+  once per frame) and the animator only **reads** its pressure.
+
 ## 7. Performance Strategy
 
 Goal: **highest *stable* frame rate**, never sacrificing smooth interaction. Acceptable first load
@@ -287,3 +309,37 @@ Runtime (requires WebXR device/browser — **cannot be verified in this environm
   back of the gauge**; the procedural wrap is the deployable training cuff until a real cuff mesh is
   supplied. The procedural gauge needle is absent on the real device (static dial) — the gauge and
   inflation controllers already null-guard `gaugeNeedle`, so the cycle drives the value without it.
+
+### Training / animation / environment extension assumptions (this change)
+
+- **A13.** **No environment asset is present** (`public/assets/env/` is empty). `entities/
+  environmentRoot.ts` is the integration **seam**: it tries to load `assets/env/training_room.glb`
+  (absent in v1) and otherwise builds a **minimal procedural stand-in** (neutral floor + faint grid +
+  low backdrop) for **non-AR preview only**. Per the optical see-through rule, the whole environment
+  root is **disabled while an XR/AR session is active** (`setArMode(true)` hides it) and restored on
+  session end. Its transform is **independent of the cuff**. Drop a real env GLB at the seam path to
+  replace the stand-in with no code change.
+- **A14.** **No source animations exist** (the GLB is static, no skins). **All training motion is
+  procedural** (`animation/proceduralMotion.ts` + `cuffAnimator.ts` + `timelineController.ts`),
+  driving the **existing** cuff entity (wrap translate/tighten, bladder swell, pickup settle, idle
+  bob) and the **existing** inflation/gauge controllers — **no second cuff is forked**. Motion ranges
+  are conservative/legible (no game-like motion). Every procedural-motion choice that implies a
+  clinical claim is flagged `SME-REVIEW:`.
+- **A15.** **Bladder swell** is represented by scaling the procedural fabric body's thickness up to
+  ~+45% at full inflation (`bloodPressureCuff.setBladderSwell`), mapped from the live inflation
+  pressure. This is an **illustrative** affordance, not a measured deformation (SME-REVIEW).
+- **A16.** The **training state machine** (`training/procedureStateMachine.ts`) is **engine-free**: it
+  consumes a plain `TrainingObservation` and emits prompts/step events, so clinical logic
+  (`config/trainingConfig.ts`, `training/stepDefinitions.ts`, `errorStates.ts`, `validationRules.ts`)
+  is reviewable by an SME without reading 3D/WebXR code. **Visual realism and procedure correctness
+  are deliberately separated.** All thresholds (pressures, rates, tolerances) are **simulator
+  scaffolding** centralized in `trainingConfig.ts` and flagged `SME-REVIEW:` — none is asserted as
+  validated clinical guidance (see `TRAINING_LOGIC.md` §7).
+- **A17.** The "**correct**" cuff size for the demo patient arm is treated as **Adult/Medium**
+  (`trainingStepController.notifySizeChosen`); other sizes raise a non-blocking `WrongSize` hint.
+  Real sizing is bladder-vs-circumference; flagged for SME review.
+- **A18.** Placement correctness is validated against a **captured target pose** (the cuff's pose when
+  the position step begins), not against an arm/anatomy model (none shipped). A translucent target
+  marker shows the goal during the position step. Orientation/position tolerances are XR-interaction
+  affordances, not clinical bands (SME-REVIEW). The training/animation tick is **allocation-free**
+  (reused observation + validation-result structs, scratch math), consistent with §7.

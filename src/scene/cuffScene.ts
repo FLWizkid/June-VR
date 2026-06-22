@@ -32,8 +32,12 @@ import { PlacementController } from '../interaction/placementController';
 import { InspectionController } from '../interaction/inspectionController';
 import { GaugeController } from '../interaction/gaugeController';
 import { InflationController } from '../interaction/inflationController';
+import { TrainingStepController } from '../interaction/trainingStepController';
 
-import { createReticle } from './debugScene';
+import { CuffAnimator } from '../animation/cuffAnimator';
+import { ProcedureStateMachine } from '../training/procedureStateMachine';
+
+import { createReticle, createTargetMarker } from './debugScene';
 
 export interface CuffSceneDeps {
   readonly app: pc.AppBase;
@@ -58,6 +62,14 @@ export class CuffScene {
   private readonly inspection: InspectionController;
   private readonly gauge: GaugeController;
   private readonly inflation: InflationController;
+
+  // Animation + training layer (procedural — no baked clips in the GLB).
+  private readonly animator: CuffAnimator;
+  private readonly machine: ProcedureStateMachine;
+  private readonly training: TrainingStepController;
+  private readonly targetMarker: pc.Entity;
+  /** Whether the training layer drives the cuff (vs free grab/inspect). Default on. */
+  private trainingEnabled = true;
 
   private layer: InteractionLayer = InteractionLayer.PlaceInspect;
   private arActive = false;
@@ -90,14 +102,36 @@ export class CuffScene {
     this.gauge = new GaugeController(this.cuff);
     this.inflation = new InflationController(this.gauge);
 
+    // Procedural animation + training scaffolding driving the EXISTING cuff (no second cuff).
+    this.animator = new CuffAnimator(this.cuff, this.inflation);
+    this.machine = new ProcedureStateMachine();
+    this.targetMarker = createTargetMarker(deps.device);
+    deps.worldRoot.addChild(this.targetMarker);
+    this.training = new TrainingStepController(
+      this.cuff,
+      this.animator,
+      this.inflation,
+      deps.camera,
+      this.targetMarker,
+      this.machine,
+    );
+
     this.hands.setOnChange(() => {
       if (this.onInputChange) this.onInputChange();
     });
   }
 
+  /** Access the procedure state machine (for the app to wire the training panel). */
+  get procedure(): ProcedureStateMachine {
+    return this.machine;
+  }
+
   /** Build the cuff geometry/materials for the initial size. Await before first frame. */
   async initialize(size: CuffSize = CuffSize.Medium): Promise<void> {
     await this.cuff.build(size);
+    this.animator.syncToCuff();
+    this.training.reset();
+    this.training.setActive(this.trainingEnabled);
     this.inspection.setActive(true);
     this.placement.placeInFront();
   }
@@ -107,14 +141,45 @@ export class CuffScene {
     this.onInputChange = cb;
   }
 
-  /** Swap the cuff size variant. */
+  /** Swap the cuff size variant. Re-syncs the animator and informs the training layer. */
   async setSize(size: CuffSize): Promise<void> {
     await this.cuff.setSize(size);
+    this.animator.syncToCuff();
+    this.training.notifySizeChosen(size);
   }
 
   /** Cycle a demonstration inflation cycle (UI hook). */
   triggerInflationCycle(): void {
-    this.inflation.startCycle();
+    this.animator.startInflationCycle();
+  }
+
+  // --- training layer hooks (used by the app to wire the training panel) ---
+
+  /** Subscribe to training status changes for the UI. */
+  onTrainingStatus(listener: Parameters<ProcedureStateMachine['setListener']>[0]): void {
+    this.machine.setListener(listener);
+  }
+
+  /** Select a training mode. */
+  setTrainingMode(mode: Parameters<TrainingStepController['setMode']>[0]): void {
+    this.training.setMode(mode);
+  }
+
+  /** Manually advance the training step. */
+  trainingNext(): void {
+    this.machine.next();
+  }
+
+  /** Restart the current training mode. */
+  trainingRestart(): void {
+    this.machine.restart();
+    this.training.reset();
+  }
+
+  /** Enable/disable the training modality (vs free inspect). */
+  setTrainingEnabled(enabled: boolean): void {
+    this.trainingEnabled = enabled;
+    this.training.setActive(enabled);
   }
 
   /** Inspection input passthrough (UI / pointer). */
@@ -144,6 +209,7 @@ export class CuffScene {
     this.anchors.clear();
     this.grab.reset();
     this.inflation.reset();
+    this.training.reset();
     this.inspection.setActive(true);
     this.placement.reset();
     this.placement.placeInFront();
@@ -197,7 +263,14 @@ export class CuffScene {
     if (!this.grab.isGrabbing) this.placement.syncToAnchor();
 
     this.inspection.update(this.arActive);
+
+    // Inflation is ticked ONCE here (single owner). The animator READS its pressure for swell.
     this.inflation.update(dt);
+
+    // Training observation/step progression (engine state -> machine), then procedural motion.
+    this.animator.setHeld(this.grab.isGrabbing);
+    this.training.update(dt);
+    this.animator.update(dt);
   }
 
   private updateHands(dt: number): void {
@@ -282,5 +355,6 @@ export class CuffScene {
     this.hitTest.stop();
     this.cuff.dispose();
     this.reticle.destroy();
+    this.targetMarker.destroy();
   }
 }

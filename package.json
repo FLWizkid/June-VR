@@ -1,0 +1,22 @@
+{
+  "name": "june-ar-bp-cuff",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Production-grade WebXR optical see-through AR blood pressure cuff training visualization. PlayCanvas standalone + TypeScript + Vite. No Unity.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "playcanvas": "^2.19.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/webxr": "^0.5.24",
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0"
+  }
+}

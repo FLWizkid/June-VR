@@ -1,119 +1,212 @@
-# AR Blood‑Pressure Device — PlayCanvas / Android XR
+# AR Blood Pressure Cuff (WebXR · PlayCanvas · No Unity)
 
-A corrected, glasses‑aware blueprint and runnable prototype for putting a 3D
-model of a blood‑pressure meter into an AR scene, targeting **Samsung / Google
-(Android XR)** hardware as well as phones.
+Production-grade **optical see-through AR** blood pressure cuff for **training-grade medical
+visualization**, built for first-edition **Android XR glasses** (Chrome / Comet). The cuff is
+rendered with realistic PBR materials and can be placed, grabbed, and inspected up close, and a
+**guided nurse-training sequence** (procedural animation + a step-by-step state machine) teaches
+sizing, orientation, placement, fit, inflation, and gauge reading.
 
-This repo exists to answer one question: *is the PlayCanvas WebXR **image‑tracking**
-approach the most efficient, accurate, and compatible way to do this on
-Samsung/Google glasses?* Short answer below, full reasoning in
-[`docs/platform-compatibility.md`](docs/platform-compatibility.md).
+**Stack:** PlayCanvas (standalone) · TypeScript (strict) · ES modules · Vite. **No Unity anywhere.**
 
----
+See also: [`SPEC.md`](./SPEC.md) (authoritative spec), [`TRAINING_LOGIC.md`](./TRAINING_LOGIC.md)
+(training design + **SME-review list**), [`RUNBOOK.md`](./RUNBOOK.md) (ops),
+[`ASSET_PIPELINE.md`](./ASSET_PIPELINE.md) (assets), [`CLAUDE.md`](./CLAUDE.md) (rules for future
+Claude Code sessions).
 
-## TL;DR verdict
-
-**No — not as proposed.** The advice you were given (PlayCanvas + WebXR
-*image tracking*, with the photo as the marker) is a reasonable recipe for
-**phone** web‑AR, but it is the *wrong primitive* for Samsung/Google glasses,
-and the chosen marker is weak. Three problems:
-
-| Your goal | The image‑tracking plan | Reality (verified June 2026) |
-|---|---|---|
-| **Compatible with Samsung/Google glasses** | Relies on WebXR image tracking | **Android XR's browser does not support image tracking at all.** Its WebXR modules are Device, AR, Gamepads, Hit Test, Hand Input, Anchors, Depth Sensing, Light Estimation — no image/marker tracking. So the plan literally cannot run on the glasses. |
-| **Image accuracy / stable tracking** | Use the attached photo as the marker | The attached photo is a **poor marker**: hands, skin, and a soft out‑of‑focus background give few stable, unique features. Even on a phone it will flicker. |
-| **"Identical, 3D"** | Optionally reconstruct from the photo | A single photo → 3D gives a plausible *front* but a **hallucinated back**; it will not be "identical." Identical‑3D needs a real model (CAD/multi‑photo), or the photo shown as a flat textured plane (2.5D, not true 3D). |
-
-WebXR image tracking is also still **experimental** in 2026 — Chrome‑on‑Android
-only, behind `chrome://flags#webxr-incubations`. It is not a production‑grade,
-cross‑device feature even before you get to glasses.
+> **Clinical honesty:** the training logic is a **simulator scaffold built for SME validation**, not
+> a validated curriculum. Visual realism and procedure correctness are kept separate; every clinical
+> assumption is flagged `SME-REVIEW:` in code and listed in `TRAINING_LOGIC.md` §7. Do not treat any
+> clinical value as authoritative until a nurse-educator / clinical SME signs off.
 
 ---
 
-## The efficient approach instead
+## Installation
 
-Decouple the two things you actually want — **(A) an accurate 3D model** and
-**(B) a way to anchor it in AR** — and pick the anchoring primitive that the
-target hardware actually supports.
-
-### B) Anchoring — use what Android XR supports
-- **On glasses / headset (Android XR):** place the model **markerless** using
-  **WebXR Hit Test + Anchors** (detect a real surface, drop the model, anchor it).
-  This is first‑class on Android XR and is the natural interaction model for
-  glasses anyway (you don't want to hold a printed card in front of smart
-  glasses). **You can keep PlayCanvas** — it supports hit test/anchors.
-- **On phones, if you specifically need the printed photo to be the anchor:**
-  WebXR image tracking *can* work (Chrome/Android, flag enabled) — the corrected
-  code is in [`web-ar/image-tracking-phone.js`](web-ar/image-tracking-phone.js).
-  Treat it as a phone‑only fallback, and use a *designed* high‑contrast marker,
-  not the hands photo.
-- **★ Chosen path for Samsung/Google glasses (speed + reality): Unity 6 +
-  AR Foundation + the Android XR OpenXR provider.** It's the best balance of fast
-  iteration and visual fidelity, and Google co‑developed the integration. The
-  full scaffold (scripts, package manifest, and an exact Editor setup checklist)
-  is in **[`unity-android-xr/`](unity-android-xr/)**. Unreal has a higher fidelity
-  ceiling but is heavier/slower; native Jetpack XR is leanest at runtime but
-  slowest to build. See [`unity-android-xr/README.md`](unity-android-xr/README.md)
-  for the scored comparison.
-
-### A) The model — get something genuinely "identical"
-Don't reconstruct the device live in the browser. Produce a clean **GLB** once,
-then load it. Options, fastest → most accurate, in
-[`docs/3d-model-pipeline.md`](docs/3d-model-pipeline.md):
-single‑image AI (TRELLIS / Hunyuan3D / Stable Fast 3D) → multi‑photo
-photogrammetry → CAD. GLB is the right runtime format for both PlayCanvas and
-Android XR.
-
----
-
-## Updated step‑by‑step
-
-1. **Decide the anchor model by target.** Glasses → markerless (hit test +
-   anchors). Phone‑with‑printed‑photo → image tracking fallback.
-2. **Get the GLB** (see `docs/3d-model-pipeline.md`). Keep it
-   glasses‑friendly: ≤ ~100k triangles, ≤ 2k textures, Draco/meshopt compressed.
-3. **Drop it in** at `web-ar/assets/model.glb`. (A primitive placeholder renders
-   if it's missing, so the app runs immediately.)
-4. **Serve `web-ar/` over HTTPS** (WebXR requires a secure context). Quick local
-   option in the folder: `npx serve` or `python3 -m http.server`, then tunnel
-   with HTTPS, or host on any static HTTPS host.
-5. **Open on the device** (Galaxy XR / Android XR browser, or Chrome on Android),
-   tap **Start AR**, look at a surface, and **pinch/tap to place** the model.
-6. **(Phone image‑tracking only)** print a designed marker at a known width, set
-   that width in meters in the script, enable the Chrome flag.
-7. **Tune.** Adjust scale/offset so the device sits *on* the surface; add a
-   shadow/reticle for grounding.
-
----
-
-## What's in here
-
-```
-unity-android-xr/            ★ RECOMMENDED for glasses (speed + reality)
-  README.md                  Why Unity, scored vs Unreal/Jetpack XR/WebXR
-  SETUP.md                   Exact Unity 6 Editor steps: packages, XR, URP, scene, build
-  Packages/manifest.json     AR Foundation 6 + Android XR OpenXR provider deps
-  Assets/Scripts/            Placement+anchor, light estimation, scene permission
-web-ar/                      Quick web demo / phone fallback
-  index.html                 Runnable PlayCanvas WebXR app (loads engine from CDN)
-  app.js                     Markerless placement: hit test + anchors (glasses-ready)
-  image-tracking-phone.js    Corrected, phone-only image-tracking fallback (experimental)
-  assets/README.md           Where to put model.glb + marker guidance
-docs/
-  3d-model-pipeline.md       How to produce an "identical" GLB (AI / photogrammetry / CAD)
-  platform-compatibility.md  Verified support matrix + sources
-```
-
-## How to run (local)
+Requirements: **Node v22**, **npm 10**.
 
 ```bash
-cd web-ar
-python3 -m http.server 8080      # or: npx serve
-# then open over HTTPS on the headset/phone (WebXR needs a secure context)
+npm install
 ```
 
-> Note: I scaffolded this without your actual GLB or the original JPG (neither
-> was available as a file in this environment). The app runs with a placeholder
-> box until you drop a real `model.glb` into `web-ar/assets/`.
+The only runtime dependency is `playcanvas`. Dev tooling is `typescript`, `vite`, `@types/node`.
 
-See `docs/platform-compatibility.md` for the sources behind every claim above.
+## Dev commands
+
+```bash
+npm run dev        # Vite dev server with HMR (http://localhost:5173)
+npm run typecheck  # tsc --noEmit (strict)
+```
+
+In dev you get a **desktop inspect mode** (cuff on a neutral background) plus an `Enter AR` button
+when the browser reports immersive-AR.
+
+## Build commands
+
+```bash
+npm run build      # tsc --noEmit && vite build  ->  dist/
+```
+
+## Preview commands
+
+```bash
+npm run preview            # serve built dist/ locally (production-like)
+npm run preview -- --host  # expose on LAN (for tunneling to a headset)
+```
+
+---
+
+## HTTPS / secure-context note for WebXR
+
+**WebXR requires a secure context.** Two hard rules:
+
+1. The page must be served over **HTTPS** (an `https://` origin). `http://localhost` is treated as
+   secure for local dev, but a **headset loading a remote URL needs real HTTPS** — tunnel
+   (ngrok/cloudflared) or host `dist/` on an HTTPS static host.
+2. The XR session can only start **from a user gesture** (the `Enter AR` button tap). It cannot be
+   auto-started on load or by a timer.
+
+The app checks `window.isSecureContext` and the availability of immersive-AR before enabling
+`Enter AR`, and shows a clear message when either is missing.
+
+---
+
+## Browser compatibility notes
+
+- **Targets:** Chrome and Comet on **Android XR** glasses (Samsung/Google first edition), **optical
+  see-through**.
+- **WebXR modules used (capability-gated):** Device API, AR module, **Hit Test, Hand Input, Anchors,
+  Depth Sensing, Light Estimation**. Every feature is detected at runtime and degrades gracefully.
+- **Not used:** WebXR **image/marker tracking** — **unsupported on Android XR**, so it is omitted.
+- **Interaction:** **hand tracking is primary** (Android XR default). Falls back to **ray**, then to
+  a **place/inspect** mode, depending on what the device/browser exposes.
+- Desktop browsers without immersive-AR still load the **inspect mode** (no AR), which is also how
+  you develop.
+
+---
+
+## Known risks
+
+(Full register in [`SPEC.md`](./SPEC.md) §9.) Top items:
+
+- **WebXR feature variability** across device/browser combinations — the biggest non-Unity risk.
+  Mitigated by capability detection + fallbacks everywhere.
+- **Hand-tracking availability** (may be absent/weak/intermittent) — 3-layer interaction with live
+  re-selection on track loss/regain.
+- **Feature gaps vs native Android XR SDK / Unity** (e.g. no WebXR marker tracking) — scoped to
+  supported modules; isolated behind a capability layer.
+- **Optical see-through display** physics (additive: black is invisible, bright washes out) — no
+  background/skybox in AR, no emissive on physical surfaces, contrast tuned for additive blend.
+- **Thermal/battery** on mobile XR — stable-first budget, adaptive quality, foveation, shadows off
+  by default.
+
+---
+
+## Assets: detected vs. NOT detected
+
+**Detected (wired, in the repo):**
+- `public/assets/models/blood_pressure_device.glb` — the real aneroid device (gauge head + coiled
+  tube + inflation bulb), static (no animations), real metres. Wired as the model for **all three
+  sizes** in `entities/cuffVariants.ts`; composited with a procedural fabric wrap by
+  `entities/bloodPressureCuff.ts`. (See `SPEC.md` §12 A11/A12.)
+
+**NOT detected (seam + stand-in in place):**
+- **Patient arm** (`public/assets/models/patient_arm.glb` absent) → `entities/patientArm.ts` builds a
+  **procedural forearm + upper-arm + hand** (tapered cones, matte skin PBR) in a relaxed bent-elbow
+  rest. It is **FOREGROUND training content and IS shown in AR** (it is the target the cuff wraps
+  onto) and is **toggleable** (`TrainingScene.setArmVisible`) for sites using a real manikin/arm. Drop
+  a real arm GLB at the seam to replace it (no code change). Anatomy/pose are **SME-REVIEW** teaching
+  affordances. (`SPEC.md` §12 A19; `TRAINING_LOGIC.md` §7.)
+- **Real fabric-cuff mesh** (still missing) → the deployable cuff body is the **procedural fabric
+  wrap** composited onto the real gauge device, now shaped as a **curved band** hugging the arm. The
+  gauge/tube/bulb come from `blood_pressure_device.glb`; the fabric band + Velcro + label are
+  procedural. Point `cuffVariants.ts` `modelUrl` at a real cuff mesh when delivered. (`SPEC.md` §12
+  A12/A20.)
+- **Environment** (`public/assets/env/` empty) → `entities/environmentRoot.ts` builds a **minimal
+  procedural stand-in** (floor + grid + backdrop) for **non-AR preview only**, and is **hidden in
+  AR**. Drop `assets/env/training_room.glb` to replace it (no code change). (`SPEC.md` §12 A13.)
+- **Source animations** (none anywhere) → **all training motion is procedural** (`animation/`).
+  (`SPEC.md` §12 A14.)
+- **Optional IBL** (`assets/env/env_atlas.ktx2` preferred, or raw `assets/env/env.hdr`) is not
+  present; reflections fall back to the constant ambient + key light. The HDR path is prefiltered at
+  runtime; the `.ktx2` path is a ready atlas. No skybox is ever painted (AR see-through). (`SPEC.md`
+  §12 A21.) The **per-surface texture sets** below are likewise absent; materials run on procedural
+  defaults.
+
+To reach final realism, supply (names are what the code's seam expects — see `TODO:` markers in
+`src/materials/textureSets.ts`, `src/entities/cuffVariants.ts`, `src/entities/environmentRoot.ts`):
+
+**Textures** → `public/assets/textures/` (KTX2 preferred; PNG accepted)
+- `fabric_albedo.*`, `fabric_normal.*`, `fabric_orm.*`
+- `velcro_albedo.*`, `velcro_normal.*`, `velcro_orm.*`
+- `tube_albedo.*`, `tube_normal.*`, `tube_orm.*`
+- `gauge_dial.*`, `label_albedo.*`  (ORM = R:AO, G:Roughness, B:Metalness)
+
+**Environment (optional)** → `public/assets/env/`
+- `training_room.glb` (preview-only environment), and/or `env_atlas.ktx2` (preferred prefiltered IBL
+  atlas) **or** `env.hdr` (raw equirect, prefiltered at runtime) for reflections.
+
+**Patient arm (optional foreground)** → `public/assets/models/`
+- `patient_arm.glb` — a real forearm/upper-arm/manikin mesh (meters; +Y up / −Z forward). Replaces the
+  procedural arm stand-in; **shown in AR** (it is the cuff target). A delivered mesh should tag
+  landmark nodes for the cuff site; until then the configured site/pose are used.
+
+**Not needed:** any marker/QR/image-tracking images (WebXR image tracking is unsupported on
+Android XR).
+
+## What still needs SME (clinical) review
+
+The procedure logic is structured for validation, not asserted as correct. See `TRAINING_LOGIC.md`
+§7 for the full list; highlights: target inflation pressure, controlled deflation rate, demo
+systolic/diastolic markers, the "correct" demo cuff size, fit/orientation/position tolerances, and
+all step wording/ordering. All are centralized in `src/config/trainingConfig.ts` and flagged
+`SME-REVIEW:`.
+
+---
+
+## How to replace placeholders with real assets
+
+The placeholder system is isolated behind one seam so swapping in real art needs **no architecture
+change**:
+
+1. **Drop files** into `public/assets/...` using the names above.
+2. **Flip the source** in `src/materials/textureSets.ts`: set the texture-set provider from
+   `procedural` to `file` (a single flag / map of URLs). The `TODO:` markers show each URL slot.
+3. **Point the model** in `src/entities/cuffVariants.ts`: fill the `modelUrl` (and per-size scale or
+   per-size URLs) in the `CuffVariantSpec`s; the loader in `core/assetRegistry.ts` will
+   `loadFromUrl(..., 'container')` and instantiate the render entity, binding `StandardMaterial`s to
+   submeshes by slot name. Enable the KTX2/meshopt decoders where the `TODO:` indicates.
+4. `npm run build` and re-test on device per [`RUNBOOK.md`](./RUNBOOK.md).
+
+Materials (`src/materials/cuffMaterials.ts`), interaction, quality profiles, and AR logic are
+asset-agnostic and remain unchanged.
+
+---
+
+## Project layout (high level)
+
+```
+public/assets/{models,textures,env,tracking,ui,training}   static assets (tracking/ unused in v1)
+src/
+  main.ts                       entry
+  config/                       appConfig, qualityProfiles, capabilities, trainingConfig
+  core/                         app, assetRegistry, sceneFactory, xrBootstrap, perf, materialFactory, featureFlags
+  ar/                           sessionManager, handTracking, gestureInterpreter, rayInteraction, hitTestPlacement, anchors, fallbackModes
+  scene/                        lightingRig, environment, cuffScene, trainingScene, debugScene
+  entities/                     bloodPressureCuff, cuffVariants, patientArm, environmentRoot
+  materials/                    cuffMaterials, textureSets
+  animation/                    cuffAnimator, timelineController, proceduralMotion
+  interaction/                  grab, inspection, placement, inflation, gauge, trainingStep controllers
+  training/                     procedureStateMachine, stepDefinitions, validationRules, instructionalPrompts, errorStates
+  ui/                           overlay, statusPanel, loadingScreen, qualityPanel, arEntryButton, unsupportedMessage, trainingPanel
+  utils/                        logging, math, units, profiling
+```
+
+### Training controls (UI)
+
+The **Training** panel (top-left) selects the mode (**Guided / Placement / Inspect / Demo**) and
+shows the current step, instruction, a progress bar, and corrective guidance, with **Next** /
+**Restart**. The **Controls** panel (bottom-left) still cycles quality tier, cuff size, and triggers
+an inflation cycle.
+
+License/owner: internal training tool. Continue development with Claude Code per
+[`CLAUDE.md`](./CLAUDE.md).

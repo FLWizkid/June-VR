@@ -96,6 +96,55 @@ export const TRAINING_TOLERANCES = {
   confirmDwellSeconds: 0.6,
 } as const;
 
+/**
+ * Procedural patient-arm anatomy + pose (meters / degrees). Drives the stand-in forearm + upper-arm
+ * the trainee wraps the cuff onto when no real arm/manikin GLB is supplied (entities/patientArm.ts).
+ *
+ * SME-REVIEW: these are *plausible adult* dimensions and a relaxed seated/extended pose chosen as a
+ * teaching affordance so the cuff reads as "a cuff on an arm" — they are NOT anthropometrically
+ * validated and the pose is not asserted as the clinically-correct measurement posture (arm
+ * supported at heart level, palm up). Confirm dimensions/pose with an educator before instructional
+ * use. See TRAINING_LOGIC.md §7. Distances in meters, angles in degrees.
+ */
+export const ARM_POSE = {
+  /** Upper-arm (shoulder→elbow) segment. radiusTop near shoulder, radiusBottom near elbow. */
+  upperArm: { length: 0.30, radiusTop: 0.055, radiusBottom: 0.045 },
+  /** Forearm (elbow→wrist) segment — where the cuff is NOT placed (cuff goes on the upper arm). */
+  forearm: { length: 0.27, radiusTop: 0.045, radiusBottom: 0.032 },
+  /** Hand stand-in length (a short rounded block past the wrist). */
+  handLength: 0.10,
+  /**
+   * World placement of the arm root (shoulder) relative to the world root, and the arm's facing.
+   * The arm extends forward/down into a relaxed rest; final pose is finalized on-device.
+   */
+  rootPosition: { x: 0.0, y: 0.0, z: 0.0 },
+  /** Euler (deg) applied to the arm root so the limb lies in a comfortable extended rest. */
+  rootEulerDeg: { x: 0, y: 0, z: 0 },
+  /** Elbow flexion (deg) between upper-arm and forearm (0 = straight). */
+  elbowFlexionDeg: 18,
+} as const;
+
+/**
+ * Where the cuff's fabric wrap sits on the UPPER ARM, and how the curved band hugs it. The wrap is
+ * placed around the upper-arm axis ~2–3 cm above the antecubital fossa (elbow crease) in real
+ * practice; here it is expressed as a fraction along the upper-arm segment + a radial clearance.
+ *
+ * SME-REVIEW: the placement height (`alongUpperArm01`) and the implied artery-marker orientation are
+ * teaching affordances, NOT validated landmarks. Confirm the correct cuff height/orientation
+ * (artery marker over the brachial artery, lower edge ~2–3 cm above the elbow crease) with an SME.
+ * Cosmetic clearances may be finalized on-device. Distances in meters, fractions normalized [0,1].
+ */
+export const CUFF_ON_ARM = {
+  /** Fraction along the upper arm (0 = shoulder, 1 = elbow) for the wrap band center. */
+  alongUpperArm01: 0.62,
+  /** Radial gap (m) between the arm surface and the inner face of the fabric band (snug, small). */
+  radialClearanceM: 0.004,
+  /** Extra angular wrap beyond a half-circle so the band visibly hugs the arm (degrees of arc). */
+  bandArcDeg: 300,
+  /** Small along-axis nudge (m) of the gauge device so it stands beside the arm, tube implied. */
+  deviceBesideOffset: { x: 0.16, y: -0.02, z: 0.14 },
+} as const;
+
 /** Default mode when the training scene starts. */
 export const DEFAULT_TRAINING_MODE: TrainingMode = TrainingMode.Guided;
 

@@ -20,8 +20,9 @@ XR-optimized** assets, and how that maps onto the code's material/variant seams.
 | Roughness / Metalness / AO (packed) | `*_orm.png/.ktx2` (R=AO, G=Rough, B=Metal) | `public/assets/textures/` | Yes |
 | Printed label / dial art | `*_label_albedo.png`, `gauge_dial.png` | `public/assets/textures/` | Recommended |
 | Reference photos | any (`.jpg/.png`) | not shipped; used for tuning only | Optional |
-| Environment lighting (IBL) | `env.hdr` or prefiltered `env_atlas.ktx2` | `public/assets/env/` | Optional |
+| Environment lighting (IBL) | prefiltered `env_atlas.ktx2` **or** raw `env.hdr` | `public/assets/env/` | Optional |
 | Environment scene (preview only) | `training_room.glb` | `public/assets/env/` | Optional |
+| Patient arm (foreground, shown in AR) | `patient_arm.glb` | `public/assets/models/` | Optional |
 
 **Final required filenames** (what the code's seam expects when you flip from placeholder to real)
 are listed in `README.md` → "Assets: detected vs. NOT detected" and mirrored by `TODO:` markers in
@@ -32,6 +33,29 @@ when present, replacing the procedural floor/grid stand-in. It is **preview-only
 environment root is **disabled while an XR/AR session is active** (optical see-through must not paint
 over the real world). Model it in **metres**, +Y up / −Z forward, keep it modest (it is secondary to
 the cuff in the perf budget), and keep its origin at the floor so the cuff rests on it in preview.
+
+**Patient-arm GLB seam (`assets/models/patient_arm.glb`).** Loaded by `entities/patientArm.ts` when
+present, replacing the **procedural arm** stand-in (tapered upper-arm + elbow + forearm + hand, matte
+skin PBR). Unlike the environment, the arm is **FOREGROUND training content and IS shown in AR** — it
+is the limb the trainee wraps the cuff onto. Model in **metres**, +Y up / −Z forward; a clean upper
+arm of roughly adult dimensions is enough. The cuff is mounted on the upper-arm site defined by
+`CUFF_ON_ARM.alongUpperArm01` (config/trainingConfig.ts); a delivered mesh should ideally tag a
+landmark node for the cuff site (artery marker over the brachial artery, lower edge ~2–3 cm above the
+elbow crease). Anatomy/pose are **SME-review** affordances (TRAINING_LOGIC.md §7); finalize on-device.
+Toggle with `TrainingScene.setArmVisible(false)` at sites that use a real manikin/arm.
+
+**IBL seam (`assets/env/env_atlas.ktx2` preferred, or `assets/env/env.hdr`).** Loaded by
+`scene/environment.ts` for **reflections only** (never a painted skybox — AR is optical see-through).
+Prefer a **prefiltered** `env_atlas.ktx2` (the format `scene.envAtlas` expects — no runtime cost). A
+raw equirect **`env.hdr`** also works and is prefiltered at load via `EnvLighting.generateLightingSource`
++ `generateAtlas` (capability-guarded; falls back to constant ambient on any failure). Optional — the
+app never depends on it.
+
+**Real fabric-cuff mesh + cuff textures are STILL the key missing art.** The deployable cuff body is
+currently the **procedural fabric wrap** (now a curved band hugging the arm) composited onto the real
+gauge device; the per-surface cuff **texture sets** (fabric/Velcro/tube/label/dial) are also absent
+(procedural defaults). Supply a real cuff mesh via `cuffVariants.ts` `modelUrl` and the textures per
+§4–§7 to reach final realism.
 
 Not required (v1): any **marker/image-tracking** images — WebXR image tracking is **unsupported** on
 Android XR, so none are shipped. `public/assets/tracking/` stays empty.

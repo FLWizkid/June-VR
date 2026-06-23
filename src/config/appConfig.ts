@@ -71,3 +71,29 @@ export const INSPECTION_DISTANCE = {
   far: inchesToMeters(12),
   default: inchesToMeters(9),
 } as const;
+
+/**
+ * COSMETIC interaction tunables, gathered in one labeled place (these are NOT clinical — clinical
+ * values live in `config/trainingConfig.ts` flagged `SME-REVIEW`). They alias the authoritative
+ * `APP_CONFIG` fields so there is still a single source of truth for the values the controllers read
+ * (the controllers intentionally read `APP_CONFIG.*` directly to stay allocation-free and avoid an
+ * extra import hop); this view exists for discoverability + documentation.
+ *
+ * IMPORTANT: every value here is a sensible default chosen for legible XR interaction. Final values
+ * are FINALIZED ON-DEVICE (SPEC item 1) — pinch distances, hysteresis, and proximity radius depend
+ * on the headset's hand-tracking precision and comfortable reach, so expect to retune on hardware.
+ */
+export const INTERACTION_TUNABLES = {
+  /** Pinch close/open thresholds + the hysteresis gap that prevents grab flicker (meters). */
+  pinch: APP_CONFIG.pinch,
+  /** Hysteresis gap (m) between close and open thresholds (derived; documents the anti-flicker band). */
+  pinchHysteresisM: APP_CONFIG.pinch.openDistance - APP_CONFIG.pinch.closeDistance,
+  /** Proximity-highlight radius (m) from a fingertip to the cuff for the hover lift. */
+  proximityHighlightRadiusM: APP_CONFIG.hoverProximity,
+  /** Released-grab velocity damping (1/s); higher settles a thrown cuff faster. */
+  releaseDamping: APP_CONFIG.releaseDamping,
+  /** Fallback placement distance (m) in front of the viewer when no hit-test surface is available. */
+  fallbackPlacementDistanceM: APP_CONFIG.fallbackPlacementDistance,
+  /** Default quality tier before the adaptive PerformanceMonitor settles it. */
+  defaultQualityTier: APP_CONFIG.defaultQualityTier,
+} as const;

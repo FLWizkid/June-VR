@@ -110,13 +110,27 @@ The app checks `window.isSecureContext` and the availability of immersive-AR bef
   `entities/bloodPressureCuff.ts`. (See `SPEC.md` §12 A11/A12.)
 
 **NOT detected (seam + stand-in in place):**
+- **Patient arm** (`public/assets/models/patient_arm.glb` absent) → `entities/patientArm.ts` builds a
+  **procedural forearm + upper-arm + hand** (tapered cones, matte skin PBR) in a relaxed bent-elbow
+  rest. It is **FOREGROUND training content and IS shown in AR** (it is the target the cuff wraps
+  onto) and is **toggleable** (`TrainingScene.setArmVisible`) for sites using a real manikin/arm. Drop
+  a real arm GLB at the seam to replace it (no code change). Anatomy/pose are **SME-REVIEW** teaching
+  affordances. (`SPEC.md` §12 A19; `TRAINING_LOGIC.md` §7.)
+- **Real fabric-cuff mesh** (still missing) → the deployable cuff body is the **procedural fabric
+  wrap** composited onto the real gauge device, now shaped as a **curved band** hugging the arm. The
+  gauge/tube/bulb come from `blood_pressure_device.glb`; the fabric band + Velcro + label are
+  procedural. Point `cuffVariants.ts` `modelUrl` at a real cuff mesh when delivered. (`SPEC.md` §12
+  A12/A20.)
 - **Environment** (`public/assets/env/` empty) → `entities/environmentRoot.ts` builds a **minimal
   procedural stand-in** (floor + grid + backdrop) for **non-AR preview only**, and is **hidden in
   AR**. Drop `assets/env/training_room.glb` to replace it (no code change). (`SPEC.md` §12 A13.)
 - **Source animations** (none anywhere) → **all training motion is procedural** (`animation/`).
   (`SPEC.md` §12 A14.)
-- **Optional IBL** (`assets/env/env_atlas.ktx2`) and the **per-surface texture sets** below are not
-  present; materials run on procedural defaults.
+- **Optional IBL** (`assets/env/env_atlas.ktx2` preferred, or raw `assets/env/env.hdr`) is not
+  present; reflections fall back to the constant ambient + key light. The HDR path is prefiltered at
+  runtime; the `.ktx2` path is a ready atlas. No skybox is ever painted (AR see-through). (`SPEC.md`
+  §12 A21.) The **per-surface texture sets** below are likewise absent; materials run on procedural
+  defaults.
 
 To reach final realism, supply (names are what the code's seam expects — see `TODO:` markers in
 `src/materials/textureSets.ts`, `src/entities/cuffVariants.ts`, `src/entities/environmentRoot.ts`):
@@ -128,8 +142,13 @@ To reach final realism, supply (names are what the code's seam expects — see `
 - `gauge_dial.*`, `label_albedo.*`  (ORM = R:AO, G:Roughness, B:Metalness)
 
 **Environment (optional)** → `public/assets/env/`
-- `training_room.glb` (preview-only environment), and/or `env.hdr` / `env_atlas.ktx2` for IBL.
-- A real **patient arm / manikin** mesh (optional) could replace the placement **target-pose** seam.
+- `training_room.glb` (preview-only environment), and/or `env_atlas.ktx2` (preferred prefiltered IBL
+  atlas) **or** `env.hdr` (raw equirect, prefiltered at runtime) for reflections.
+
+**Patient arm (optional foreground)** → `public/assets/models/`
+- `patient_arm.glb` — a real forearm/upper-arm/manikin mesh (meters; +Y up / −Z forward). Replaces the
+  procedural arm stand-in; **shown in AR** (it is the cuff target). A delivered mesh should tag
+  landmark nodes for the cuff site; until then the configured site/pose are used.
 
 **Not needed:** any marker/QR/image-tracking images (WebXR image tracking is unsupported on
 Android XR).
@@ -173,7 +192,7 @@ src/
   core/                         app, assetRegistry, sceneFactory, xrBootstrap, perf, materialFactory, featureFlags
   ar/                           sessionManager, handTracking, gestureInterpreter, rayInteraction, hitTestPlacement, anchors, fallbackModes
   scene/                        lightingRig, environment, cuffScene, trainingScene, debugScene
-  entities/                     bloodPressureCuff, cuffVariants, environmentRoot
+  entities/                     bloodPressureCuff, cuffVariants, patientArm, environmentRoot
   materials/                    cuffMaterials, textureSets
   animation/                    cuffAnimator, timelineController, proceduralMotion
   interaction/                  grab, inspection, placement, inflation, gauge, trainingStep controllers

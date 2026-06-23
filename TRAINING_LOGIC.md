@@ -135,6 +135,17 @@ Each item is also flagged `SME-REVIEW:` at its source. None is asserted as clini
    instructional text, and the corrective text against an authoritative source (e.g. AHA measurement
    guidance) **and the specific device's IFU**.
 9. **Demonstration pacing** (`DEMO_SEGMENTS` durations) — presentation only.
+10. **Procedural patient-arm anatomy & pose** (`ARM_POSE` in `config/trainingConfig.ts`;
+    `entities/patientArm.ts`). The upper-arm/forearm dimensions and the relaxed **bent-elbow rest
+    pose** are plausible-adult teaching affordances, **not** anthropometrically validated and **not**
+    the asserted clinically-correct measurement posture (arm supported at **heart level, palm up**).
+    Confirm acceptable dimensions, pose, and whether a supported/heart-level posture should be taught
+    or enforced. (The arm is a stand-in until a real arm/manikin GLB is supplied.)
+11. **Cuff-on-arm placement** (`CUFF_ON_ARM` in `config/trainingConfig.ts`). The wrap is centered at
+    `alongUpperArm01` of the upper arm with an implied artery-marker orientation. Confirm the correct
+    **landmark** (artery marker over the **brachial artery**; lower cuff edge **~2–3 cm above the
+    antecubital fossa**) and acceptable placement band. Currently a visual affordance only — placement
+    correctness is still scored against a **captured target pose**, not arm anatomy (see §8).
 
 > Recommended sources for the SME to validate against: current **AHA/ACC blood-pressure measurement
 > guidance**, **AAMI/ISO 81060** cuff sizing, and the **manufacturer IFU** for the specific cuff.
@@ -145,7 +156,10 @@ Each item is also flagged `SME-REVIEW:` at its source. None is asserted as clini
 
 - No real blood-pressure **reading** is computed; systolic/diastolic markers are scripted teaching
   cues, not measurements.
-- No patient-arm model is shipped; placement is validated against a **captured target pose**, not
-  anatomy. (A real arm/manikin model can replace the target seam later.)
+- A **procedural patient arm** is now shown (foreground, also in AR) as the cuff target, but it is a
+  **visual stand-in with unvalidated anatomy/pose** (§7 items 10–11); placement is still validated
+  against a **captured target pose**, **not** the arm's anatomy. A real arm/manikin GLB
+  (`assets/models/patient_arm.glb`) can replace the stand-in, and landmark-based validation can replace
+  the captured-pose seam, later.
 - No assessment/scoring/credentialing — this is familiarization, structured so scoring **could** be
   layered on the existing `ValidationResult` once an SME defines passing criteria.

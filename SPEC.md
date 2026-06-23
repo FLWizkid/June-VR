@@ -343,3 +343,45 @@ Runtime (requires WebXR device/browser — **cannot be verified in this environm
   marker shows the goal during the position step. Orientation/position tolerances are XR-interaction
   affordances, not clinical bands (SME-REVIEW). The training/animation tick is **allocation-free**
   (reused observation + validation-result structs, scratch math), consistent with §7.
+
+### Patient-arm / cuff-on-arm / IBL / tuning assumptions (this change)
+
+- **A19.** **No patient-arm asset is present** (`assets/models/patient_arm.glb` absent).
+  `entities/patientArm.ts` is the seam: it tries to load that GLB and otherwise builds a **procedural
+  arm** (tapered upper-arm + elbow + flexed forearm + hand, single matte skin PBR — no game-gloss),
+  built **once**, allocation-free. Dimensions/pose come from `ARM_POSE` in `config/trainingConfig.ts`.
+  Unlike the environment, the arm is **FOREGROUND content and IS shown in AR** (it is the limb the
+  cuff wraps onto); it is **toggleable** (`TrainingScene.setArmVisible` / `PatientArm.setVisible`) for
+  sites with a real manikin/arm. The arm exposes `root`, a `setVisible(bool)`, and placement frames
+  (`cuffFrame` on the upper arm — the clinically-correct site — and `forearmFrame`). **Anatomy and the
+  relaxed bent-elbow rest pose are teaching affordances, NOT anthropometrically validated and NOT
+  asserted as the correct measurement posture** — flagged `SME-REVIEW:` and listed in
+  `TRAINING_LOGIC.md` §7.
+- **A20.** **Cuff-on-arm composition.** The cuff's **procedural fabric wrap** is reshaped from a flat
+  slab into a **curved band** that hugs a limb of the arm's measured radius (`BloodPressureCuff.
+  setArmWrap` → `buildCurvedBand`; a few flat fabric "staves" tangent to the wrap circle approximate
+  the curve while reusing the existing fabric material — **no second cuff is forked**, no custom mesh,
+  no runtime allocation). The arm is mounted **under the cuff root** via a small mount node so it
+  **rides with the cuff** and always reads as "a cuff on an arm" through placement/grab in every mode;
+  the arm remains its **own entity** (distinct geometry/material, toggleable, shown in AR) and is not
+  fused into the cuff mesh. The gauge **device GLB is offset beside the arm** (`setDeviceOffset`, value
+  from `CUFF_ON_ARM.deviceBesideOffset`), tube implied. **Bladder swell** on a band bulges **radially**
+  (vs the slab's thickness) so inflation reads correctly. The clinical placement on the arm
+  (`CUFF_ON_ARM.alongUpperArm01`, artery-marker orientation) is centralized in `trainingConfig.ts`,
+  flagged `SME-REVIEW:`; the band's curvature constants are cosmetic and live in the entity.
+- **A21.** **IBL seam.** `scene/environment.ts` optionally loads `assets/env/env_atlas.ktx2` (a ready
+  **prefiltered** atlas, used directly) or, failing that, `assets/env/env.hdr` (a raw equirect,
+  prefiltered at runtime via `EnvLighting.generateLightingSource` + `generateAtlas`). Used for
+  **reflections only** — `scene.skybox` is **never set** and `skyboxIntensity` is forced to 0 in AR
+  (optical see-through; belt-and-suspenders with the camera's `clearColorBuffer = false`). Fully
+  capability-guarded (try/catch); any absence/failure degrades to the existing constant ambient + key
+  light. The app never depends on an IBL asset.
+- **A22.** **Tuning centralization + on-device finalization.** New placement/pose constants live in
+  `config/trainingConfig.ts` (`ARM_POSE`, `CUFF_ON_ARM` — clinical-adjacent, flagged `SME-REVIEW:`),
+  and the **cosmetic** interaction tunables (pinch close/open + hysteresis, proximity-highlight radius,
+  release damping, fallback placement distance, default quality tier) are gathered in
+  `config/appConfig.ts` `INTERACTION_TUNABLES` (a documented view aliasing the authoritative
+  `APP_CONFIG` fields the controllers read). Clinical-vs-cosmetic separation (CLAUDE.md rule 8) is
+  preserved. All such values are **defaults finalized on-device** — pinch/proximity depend on the
+  headset's hand-tracking precision; arm pose / cuff-on-arm offsets are confirmed against the real
+  see-through framing.

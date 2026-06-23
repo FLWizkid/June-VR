@@ -5,6 +5,11 @@ on:
     branches: [main, "claude/**"]
   pull_request:
 
+# Avoid double-running when a push and its pull_request target the same ref; cancel superseded runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest

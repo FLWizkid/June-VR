@@ -31,6 +31,15 @@ const log = createLogger('cuff');
  */
 const WRAP_OFFSET = new pc.Vec3(0.22, 0, 0.02);
 
+/**
+ * Curved-band wrap tunables (cosmetic; finalized on-device). Used only when the wrap is configured
+ * to hug an arm via `setArmWrap`. The clinical placement (where on the arm) lives in
+ * `config/trainingConfig.ts` (`CUFF_ON_ARM`); these shape the band geometry itself.
+ */
+const CUFF_BAND_CLEARANCE = 0.004; // radial gap (m) between limb surface and band inner face
+const CUFF_BAND_ARC_DEG = 300; // arc (deg) the band wraps around the limb
+const CUFF_BAND_STAVES = 9; // flat staves approximating the curve (more = smoother, costlier)
+
 export class BloodPressureCuff {
   /** Root entity; parent this under the world/anchor root. */
   readonly root: pc.Entity;
@@ -60,6 +69,17 @@ export class BloodPressureCuff {
 
   private size: CuffSize = CuffSize.Medium;
   private highlighted = false;
+  /**
+   * When non-null, the next build makes the fabric wrap a CURVED BAND hugging a limb of this radius
+   * (m) instead of a flat slab — so the cuff reads as wrapped around an arm. Set via `setArmWrap`
+   * BEFORE build()/setSize(); null restores the flat-slab body. This reshapes the EXISTING wrap on
+   * the EXISTING cuff (no second cuff is forked).
+   */
+  private armWrapRadius: number | null = null;
+  /** True when the current wrap body was built as a curved band (selects swell axis). */
+  private wrapIsBand = false;
+  /** Local offset for the real device GLB (so it stands beside an arm). Default: no offset. */
+  private readonly deviceLocalOffset = new pc.Vec3(0, 0, 0);
 
   /** Cached world-space AABB and the parameters it was computed for. */
   private readonly cachedAabb = new pc.BoundingBox();
@@ -114,9 +134,13 @@ export class BloodPressureCuff {
       if (!deviceLoaded) log.warn(`device model load failed for ${size}; using full procedural placeholder`);
     }
 
+    // When the wrap is a curved arm-band, it must be centered on the wrap-node origin so it wraps the
+    // limb axis (the training scene mounts the whole cuff onto the arm frame). The flat-slab body,
+    // by contrast, is laid out BESIDE the device via WRAP_OFFSET in composite mode.
+    const wrapOffset = this.armWrapRadius !== null ? null : WRAP_OFFSET;
     if (deviceLoaded) {
-      // Composite: real gauge device + procedural, size-specific fabric arm wrap (offset beside it).
-      this.buildCuffWrap(variant, WRAP_OFFSET);
+      // Composite: real gauge device + procedural, size-specific fabric arm wrap.
+      this.buildCuffWrap(variant, wrapOffset);
     } else {
       // Full procedural fallback (no real asset): wrap + hardware together at the origin.
       this.buildCuffWrap(variant, null);
@@ -147,6 +171,26 @@ export class BloodPressureCuff {
   }
 
   /**
+   * Configure the fabric wrap to hug an arm of `radiusM` (curved band) on the NEXT build, or pass
+   * null to restore the flat slab. Call BEFORE `build()`/`setSize()`. Reshapes the EXISTING wrap on
+   * the EXISTING cuff — it does NOT create a second cuff. The clinical placement of the cuff on the
+   * arm is owned by the training scene (`CUFF_ON_ARM` in trainingConfig); this only sets the band's
+   * curvature to match the limb so it reads as wrapped, not floating.
+   */
+  setArmWrap(radiusM: number | null): void {
+    this.armWrapRadius = radiusM !== null && radiusM > 0 ? radiusM : null;
+  }
+
+  /**
+   * Local offset (cuff-root space) applied to the real gauge DEVICE GLB on the next build, so it can
+   * stand BESIDE the arm (tube implied) instead of overlapping it when the wrap is mounted on a limb.
+   * No-op in full-procedural mode (the procedural hardware has its own layout). Call BEFORE build().
+   */
+  setDeviceOffset(x: number, y: number, z: number): void {
+    this.deviceLocalOffset.set(x, y, z);
+  }
+
+  /**
    * REAL-ASSET PATH. Instantiates the GLB and binds materials by submesh/material slot name.
    * Returns false if loading/instantiation failed so the caller can fall back to procedural.
    */
@@ -156,6 +200,7 @@ export class BloodPressureCuff {
     if (!entity) return false;
 
     entity.setLocalScale(variant.modelScale, variant.modelScale, variant.modelScale);
+    entity.setLocalPosition(this.deviceLocalOffset.x, this.deviceLocalOffset.y, this.deviceLocalOffset.z);
     this.root.addChild(entity);
 
     // Bind materials by name and collect highlight targets (fabric/body).
@@ -181,9 +226,14 @@ export class BloodPressureCuff {
    * Procedural fabric arm wrap (body + Velcro + label), sized from the variant. In composite mode
    * `offset` lays it on the surface beside the real device; in full-procedural mode `offset` is null
    * so it sits at the origin alongside the procedural hardware. All units in meters.
+   *
+   * Two body styles share the SAME wrap node + swell pipeline (no second cuff is forked):
+   *   - CURVED BAND (when `armWrapRadius` was set via `setArmWrap`): the fabric reads as a band
+   *     hugging a limb of that radius, so tightening/swell reads as a cuff wrapping an arm.
+   *   - FLAT SLAB (default / no arm): the original thin-box body, used in the full-procedural fallback
+   *     and any preview where the cuff is laid out on a surface beside the device.
    */
   private buildCuffWrap(variant: CuffVariantSpec, offset: pc.Vec3 | null): void {
-    const b = variant.bladder;
     // Always create a dedicated wrap node so the animator has a stable handle to drive (wrap/tighten/
     // position), in BOTH composite and full-procedural modes. At `offset` beside the device when
     // compositing; at the origin otherwise.
@@ -192,31 +242,117 @@ export class BloodPressureCuff {
     this.root.addChild(parent);
     this.wrapNode = parent;
 
-    // Cuff body: a flat curved-ish fabric slab. We model it as a thin box laid horizontally.
-    const body = this.makeMeshEntity('cuff-body', this.boxMesh(b.width, b.thickness, b.height), 'fabric');
-    body.setLocalPosition(0, b.thickness * 0.5, 0);
-    parent.addChild(body);
-    this.collectHighlight(body);
-    this.wrapBody = body;
-    this.wrapBodyBaseScale.copy(body.getLocalScale());
+    // The swell group ALWAYS wraps the fabric body pieces, so `setBladderSwell` can scale one node
+    // regardless of body style. The Velcro/label ride along inside it.
+    const bodyGroup = new pc.Entity('cuff-body');
+    parent.addChild(bodyGroup);
+    this.wrapBody = bodyGroup;
 
-    // Velcro strip across one end of the body.
+    if (this.armWrapRadius !== null) {
+      this.wrapIsBand = true;
+      this.buildCurvedBand(variant, bodyGroup, this.armWrapRadius);
+    } else {
+      this.wrapIsBand = false;
+      this.buildFlatSlab(variant, bodyGroup);
+    }
+
+    this.wrapBodyBaseScale.copy(bodyGroup.getLocalScale());
+  }
+
+  /**
+   * Original flat fabric slab + Velcro + label (full-procedural fallback / surface layout). Pieces are
+   * added under `group` (the swell group). Local +Y is "up off the surface".
+   */
+  private buildFlatSlab(variant: CuffVariantSpec, group: pc.Entity): void {
+    const b = variant.bladder;
+    const body = this.makeMeshEntity('cuff-body-slab', this.boxMesh(b.width, b.thickness, b.height), 'fabric');
+    body.setLocalPosition(0, b.thickness * 0.5, 0);
+    group.addChild(body);
+    this.collectHighlight(body);
+
     const velcro = this.makeMeshEntity(
       'velcro',
       this.boxMesh(b.width * 0.96, b.thickness * 0.4, b.height * 0.22),
       'velcroHook',
     );
     velcro.setLocalPosition(0, b.thickness + 0.001, b.height * 0.36);
-    parent.addChild(velcro);
+    group.addChild(velcro);
 
-    // Printed label patch on top of the fabric.
     const label = this.makeMeshEntity(
       'label',
       this.boxMesh(b.width * 0.5, 0.0015, b.height * 0.3),
       'label',
     );
     label.setLocalPosition(0, b.thickness + 0.002, -b.height * 0.18);
-    parent.addChild(label);
+    group.addChild(label);
+  }
+
+  /**
+   * Curved fabric band hugging a limb of radius `armRadius`. The band wraps around the wrap node's
+   * local +Y axis (the limb axis when mounted on an arm frame): the strip lies in the local XZ plane
+   * and spans `b.width` ALONG the axis (limb-length direction = local Y) and an arc AROUND it.
+   *
+   * Geometry: a handful of thin flat "staves" placed tangent to the wrap circle approximate a smooth
+   * curved band while reusing the flat fabric material (a few primitives, no custom mesh, no runtime
+   * allocation). Velcro + label are short staves on the outer face. Allocation is build-time only.
+   */
+  private buildCurvedBand(variant: CuffVariantSpec, group: pc.Entity, armRadius: number): void {
+    const b = variant.bladder;
+    const bandWidth = b.width; // along the limb axis (local Y)
+    const bandThickness = b.thickness; // radial fabric thickness
+    const innerR = armRadius + CUFF_BAND_CLEARANCE;
+    const midR = innerR + bandThickness * 0.5;
+
+    // Number of staves + the total arc they cover. More staves = smoother; keep modest for perf.
+    const staves = CUFF_BAND_STAVES;
+    const arcRad = (CUFF_BAND_ARC_DEG * Math.PI) / 180;
+    const start = -arcRad * 0.5;
+    // Each stave is a chord; width so adjacent staves touch around the arc.
+    const staveChord = 2 * midR * Math.tan(arcRad / (2 * staves)) * 1.02;
+
+    for (let i = 0; i < staves; i++) {
+      const a = start + (arcRad * (i + 0.5)) / staves;
+      const sinA = Math.sin(a);
+      const cosA = Math.cos(a);
+      const stave = this.makeMeshEntity(
+        `cuff-band-${i}`,
+        // box: x = chord (around arc), y = bandWidth (along limb), z = radial thickness
+        this.boxMesh(staveChord, bandWidth, bandThickness),
+        'fabric',
+      );
+      // Place tangent to the circle at angle a in the XZ plane (limb axis = Y).
+      stave.setLocalPosition(sinA * midR, 0, cosA * midR);
+      // Rotate about Y so the box's thin (z) face points radially outward.
+      stave.setLocalEulerAngles(0, (a * 180) / Math.PI, 0);
+      group.addChild(stave);
+      this.collectHighlight(stave);
+    }
+
+    // Velcro closure: a couple of staves on the OUTER face near the band's free end (top of arc).
+    const outerR = innerR + bandThickness + 0.001;
+    const velcroChord = staveChord * 0.96;
+    for (let k = 0; k < 2; k++) {
+      const a = start + arcRad * (k === 0 ? 0.06 : 0.16);
+      const sinA = Math.sin(a);
+      const cosA = Math.cos(a);
+      const velcro = this.makeMeshEntity(
+        `velcro-${k}`,
+        this.boxMesh(velcroChord, bandWidth * 0.5, bandThickness * 0.35),
+        'velcroHook',
+      );
+      velcro.setLocalPosition(sinA * outerR, 0, cosA * outerR);
+      velcro.setLocalEulerAngles(0, (a * 180) / Math.PI, 0);
+      group.addChild(velcro);
+    }
+
+    // Printed label patch on the outer face, centered on the arc.
+    const label = this.makeMeshEntity(
+      'label',
+      this.boxMesh(staveChord * 1.1, bandWidth * 0.5, 0.0015),
+      'label',
+    );
+    label.setLocalPosition(0, 0, outerR + 0.001);
+    group.addChild(label);
   }
 
   /**
@@ -349,22 +485,39 @@ export class BloodPressureCuff {
   }
 
   /**
-   * Suggest bladder inflation by swelling the fabric body's thickness (local Y) about its base
-   * scale. `fraction` in [0,1] (0 = resting, 1 = fully inflated). Allocation-free; reuses a scratch.
-   * Driven by the cuff animator from the inflation pressure. No-op if the wrap body is absent.
+   * Suggest bladder inflation by swelling the fabric body about its base scale. `fraction` in [0,1]
+   * (0 = resting, 1 = fully inflated). Allocation-free; reuses a scratch. Driven by the cuff animator
+   * from the inflation pressure. No-op if the wrap body is absent.
+   *
+   * The swell AXIS depends on the body style so it reads correctly either way:
+   *   - CURVED BAND: bulge RADIALLY (local X+Z) so the band visibly puffs outward around the limb,
+   *     while the along-limb width (local Y) stays ~constant (training-plausible).
+   *   - FLAT SLAB: bulge in THICKNESS (local Y), width/length barely change (original behaviour).
    */
   setBladderSwell(fraction: number): void {
     const body = this.wrapBody;
     if (!body) return;
     const f = fraction < 0 ? 0 : fraction > 1 ? 1 : fraction;
-    // Up to +45% thickness at full inflation; width/length barely change (training-plausible).
-    const sy = 1 + 0.45 * f;
-    const sxz = 1 + 0.03 * f;
-    tmp.vecA.set(
-      this.wrapBodyBaseScale.x * sxz,
-      this.wrapBodyBaseScale.y * sy,
-      this.wrapBodyBaseScale.z * sxz,
-    );
+    if (this.wrapIsBand) {
+      // Radial puff up to +18% outward; small length change. (Less than the slab's +45% because the
+      // band's whole radius scales, which is visually stronger.)
+      const sRadial = 1 + 0.18 * f;
+      const sAxial = 1 + 0.02 * f;
+      tmp.vecA.set(
+        this.wrapBodyBaseScale.x * sRadial,
+        this.wrapBodyBaseScale.y * sAxial,
+        this.wrapBodyBaseScale.z * sRadial,
+      );
+    } else {
+      // Up to +45% thickness at full inflation; width/length barely change.
+      const sy = 1 + 0.45 * f;
+      const sxz = 1 + 0.03 * f;
+      tmp.vecA.set(
+        this.wrapBodyBaseScale.x * sxz,
+        this.wrapBodyBaseScale.y * sy,
+        this.wrapBodyBaseScale.z * sxz,
+      );
+    }
     body.setLocalScale(tmp.vecA.x, tmp.vecA.y, tmp.vecA.z);
     this.aabbDirty = true;
   }

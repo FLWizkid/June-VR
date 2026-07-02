@@ -11,6 +11,8 @@
 import { ARCuffApplication } from './core/app';
 import { createLogger, setLogLevel, LogLevel } from './utils/logging';
 import { mountMirrorPanel } from './ui/mirrorPanel';
+import { mountVersionBanner } from './utils/versionBanner';
+import { registerServiceWorker } from './utils/registerServiceWorker';
 
 const log = createLogger('main');
 
@@ -36,6 +38,10 @@ async function boot(): Promise<void> {
     log.info('application ready');
     // Mount PC-mirror control panel (broadcasts canvas over WebRTC).
     mountMirrorPanel(canvas);
+    // Version banner (bottom-left, click to copy build info).
+    mountVersionBanner();
+    // Offline service worker (production only).
+    registerServiceWorker();
   } catch (err) {
     log.error('failed to start application', err);
     showFatal(err);

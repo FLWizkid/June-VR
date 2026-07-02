@@ -44,6 +44,7 @@
   ],
   "rewrites": [
     { "source": "/mirror", "destination": "/mirror.html" },
-    { "source": "/((?!mirror|mirror\\.html|assets/.*|.*\\.(?:js|css|map|png|jpg|jpeg|gif|svg|ico|webp|wasm|glb|gltf|bin|json|woff2?|ttf)).*)", "destination": "/index.html" }
+    { "source": "/qr", "destination": "/qr.html" },
+    { "source": "/((?!mirror|mirror\\.html|qr|qr\\.html|assets/.*|icons/.*|sw\\.js|manifest\\.webmanifest|robots\\.txt|favicon\\.ico|.*\\.(?:js|css|map|png|jpg|jpeg|gif|svg|ico|webp|wasm|glb|gltf|bin|json|woff2?|ttf)).*)", "destination": "/index.html" }
   ]
 }

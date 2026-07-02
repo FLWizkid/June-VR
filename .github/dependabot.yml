@@ -1,0 +1,32 @@
+version: 2
+updates:
+  # npm packages
+  - package-ecosystem: 'npm'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '08:00'
+      timezone: 'America/New_York'
+    open-pull-requests-limit: 5
+    labels:
+      - 'dependencies'
+    groups:
+      # Batch all patch/minor updates into one PR to reduce noise.
+      minor-and-patch:
+        update-types:
+          - 'patch'
+          - 'minor'
+    # Never auto-bump major versions of PlayCanvas (breaking API risk).
+    ignore:
+      - dependency-name: 'playcanvas'
+        update-types: ['version-update:semver-major']
+
+  # GitHub Actions
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'monthly'
+    labels:
+      - 'dependencies'
+      - 'ci'

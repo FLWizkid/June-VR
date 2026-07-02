@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>June-VR · QR Launch Codes</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0; padding: 0; min-height: 100%;
+        background: #0a0c10; color: #e8edf2;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+      main {
+        max-width: 720px; margin: 0 auto; padding: 40px 24px;
+      }
+      h1 { font-size: 22px; margin: 0 0 8px; }
+      p.subtitle { opacity: 0.7; margin: 0 0 32px; font-size: 14px; }
+      .card {
+        background: #10141b; border: 1px solid #1e2530;
+        border-radius: 12px; padding: 24px; margin-bottom: 20px;
+        display: flex; gap: 24px; align-items: center;
+      }
+      .card .qr {
+        background: white; padding: 12px; border-radius: 8px;
+        flex-shrink: 0;
+      }
+      .card canvas { display: block; }
+      .card .info { flex: 1; min-width: 0; }
+      .card h2 { margin: 0 0 6px; font-size: 16px; font-weight: 600; }
+      .card p { margin: 0 0 8px; opacity: 0.7; font-size: 13px; line-height: 1.5; }
+      .card code {
+        display: block; background: #0a0c10; padding: 8px 10px;
+        border-radius: 6px; font-size: 12px;
+        word-break: break-all; font-family: ui-monospace, monospace;
+      }
+      footer { text-align: center; opacity: 0.5; font-size: 12px; padding: 20px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>🥽 June-VR Launch Codes</h1>
+      <p class="subtitle">
+        Scan these from the Samsung Galaxy XR (or any device) to open the app
+        instantly — no typing.
+      </p>
+
+      <div class="card">
+        <div class="qr"><canvas id="qr-main" width="180" height="180"></canvas></div>
+        <div class="info">
+          <h2>Launch AR App</h2>
+          <p>Opens the main AR blood-pressure cuff experience.</p>
+          <code id="url-main">…</code>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="qr"><canvas id="qr-mirror" width="180" height="180"></canvas></div>
+        <div class="info">
+          <h2>Open PC Mirror Viewer</h2>
+          <p>Open this on your PC to watch what the headset is showing.</p>
+          <code id="url-mirror">…</code>
+        </div>
+      </div>
+    </main>
+    <footer>Tip: bookmark <code>/qr</code> so these codes are always one click away.</footer>
+
+    <script type="module" src="/src/qr/qrPage.ts"></script>
+  </body>
+</html>

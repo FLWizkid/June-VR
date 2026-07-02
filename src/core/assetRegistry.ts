@@ -18,14 +18,27 @@ const log = createLogger('assets');
 export class AssetRegistry {
   private readonly app: pc.AppBase;
   private readonly textureCache = new Map<string, pc.Texture>();
+  /**
+   * Whether a KTX2/Basis transcoder has been initialized. KTX2 textures CANNOT be decoded until it
+   * is — the engine's Basis parser never fires its load/error callback without it, which would hang
+   * any awaiter (e.g. the optional IBL atlas, or file-mode cuff textures). v1 ships no KTX2 assets,
+   * so this stays false and `.ktx2` loads fail-fast to null (graceful ambient/procedural fallback).
+   * When wiring real KTX2 art: call `pc.basisInitialize(...)` below AND set this to true.
+   */
+  private basisReady = false;
 
   constructor(app: pc.AppBase) {
     this.app = app;
     // TODO(real-assets): when shipping KTX2/Basis + meshopt-compressed GLBs, enable the engine
-    // decoders before loading, e.g.:
-    //   pc.basisInitialize({ glueUrl, wasmUrl, fallbackUrl });   // KTX2/Basis transcoder
-    //   pc.dracoInitialize({ jsUrl, wasmUrl });                  // if Draco is used
+    // decoders before loading, then set `this.basisReady = true`, e.g.:
+    //   pc.basisInitialize({ glueUrl, wasmUrl, fallbackUrl }); this.basisReady = true; // KTX2/Basis
+    //   pc.dracoInitialize({ jsUrl, wasmUrl });                                        // if Draco used
     // meshopt is handled by the engine's glb parser automatically. See ASSET_PIPELINE.md §9.
+  }
+
+  /** Whether KTX2/Basis textures can be decoded (transcoder initialized). */
+  get canDecodeBasis(): boolean {
+    return this.basisReady;
   }
 
   /**
@@ -62,14 +75,21 @@ export class AssetRegistry {
   }
 
   /**
-   * Load a 2D texture (PNG/KTX2). Cached by URL. Resolves to null on failure.
+   * Load a 2D texture (PNG/JPG/KTX2). Cached by URL. Resolves to null on failure.
    *
-   * @param url - URL under public/assets/textures/.
+   * @param url - URL under public/assets/.
    * @param srgb - True for color maps (albedo/label), false for normal/ORM (linear).
    */
   loadTexture(url: string, srgb: boolean): Promise<pc.Texture | null> {
     const cached = this.textureCache.get(url);
     if (cached) return Promise.resolve(cached);
+
+    // KTX2/Basis needs the transcoder; without it the engine loader never settles and would hang the
+    // awaiter. Fail-fast to null so optional loads (IBL atlas, file-mode textures) degrade gracefully.
+    if (!this.basisReady && url.endsWith('.ktx2')) {
+      log.warn(`skipping KTX2 (Basis transcoder not initialized): ${url}`);
+      return Promise.resolve(null);
+    }
 
     return new Promise((resolve) => {
       this.app.assets.loadFromUrl(url, 'texture', (err, asset) => {

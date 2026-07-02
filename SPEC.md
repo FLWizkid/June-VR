@@ -385,3 +385,14 @@ Runtime (requires WebXR device/browser — **cannot be verified in this environm
   preserved. All such values are **defaults finalized on-device** — pinch/proximity depend on the
   headset's hand-tracking precision; arm pose / cuff-on-arm offsets are confirmed against the real
   see-through framing.
+- **A23.** **Runtime verification + fixes (headless smoke test).** `tsc`/Vite/CI never *run* the app,
+  so a headless-browser smoke test of the non-AR inspect mode is used to catch runtime-only bugs. It
+  found + we fixed two startup-blocking bugs: (1) `LightComponent.type` must be the **string**
+  `'directional'` — the numeric `pc.LIGHTTYPE_*` left the internal light type `undefined` and threw in
+  the cull loop; (2) the optional **IBL** load hung `start()` — KTX2 needs the **Basis transcoder**
+  (`assetRegistry.basisReady`, not yet wired), so `.ktx2` loads now **fail-fast to null**, and optional
+  IBL files are **HEAD-probed** first so a missing file / dev-server 200-HTML fallback never blocks
+  startup. Anchor creation is now gated on an **active XR session** (it errors outside one). With these,
+  inspect-mode startup completes (~0.2 s) and renders the scene; real WebXR/AR + hand-tracking remain
+  an on-device check. **Known limitation:** KTX2 texture seams (IBL atlas + file-mode cuff textures)
+  stay inert until `pc.basisInitialize(...)` is wired in `assetRegistry.ts`.

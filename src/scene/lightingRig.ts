@@ -34,7 +34,10 @@ export class LightingRig {
 
     this.keyLight = new pc.Entity('key-light');
     this.keyLight.addComponent('light', {
-      type: pc.LIGHTTYPE_DIRECTIONAL,
+      // PlayCanvas LightComponent.type is a STRING enum ('directional' | 'omni' | 'spot'). Passing
+      // the numeric `pc.LIGHTTYPE_*` leaves the internal light type `undefined` and throws every frame
+      // in the shadow/cull loop (`splitLights[undefined].push`). Runtime-verified fix.
+      type: 'directional',
       color: DEFAULT_KEY_COLOR.clone(),
       intensity: DEFAULT_KEY_INTENSITY,
       castShadows: false,

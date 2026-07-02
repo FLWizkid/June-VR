@@ -10,6 +10,7 @@
 
 import { ARCuffApplication } from './core/app';
 import { createLogger, setLogLevel, LogLevel } from './utils/logging';
+import { mountMirrorPanel } from './ui/mirrorPanel';
 
 const log = createLogger('main');
 
@@ -33,6 +34,8 @@ async function boot(): Promise<void> {
   try {
     await application.start();
     log.info('application ready');
+    // Mount PC-mirror control panel (broadcasts canvas over WebRTC).
+    mountMirrorPanel(canvas);
   } catch (err) {
     log.error('failed to start application', err);
     showFatal(err);

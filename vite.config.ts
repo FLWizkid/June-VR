@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite';
+import { resolve } from 'node:path';
 
 /**
  * Vite configuration for the AR Blood Pressure Cuff app.
@@ -21,6 +22,11 @@ export default defineConfig({
     // PlayCanvas is sizable; raise the warning limit so the build stays clean.
     chunkSizeWarningLimit: 2500,
     rollupOptions: {
+      // Multi-page: main app at /, mirror viewer at /mirror.html.
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        mirror: resolve(__dirname, 'mirror.html'),
+      },
       output: {
         // Keep PlayCanvas in its own chunk for cacheability and clearer load timing.
         manualChunks: {

@@ -43,6 +43,7 @@
     }
   ],
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/mirror", "destination": "/mirror.html" },
+    { "source": "/((?!mirror|mirror\\.html|assets/.*|.*\\.(?:js|css|map|png|jpg|jpeg|gif|svg|ico|webp|wasm|glb|gltf|bin|json|woff2?|ttf)).*)", "destination": "/index.html" }
   ]
 }

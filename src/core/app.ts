@@ -32,6 +32,7 @@ import { Environment } from '../scene/environment';
 import { TrainingScene } from '../scene/trainingScene';
 import { formatCapabilityDebug } from '../scene/debugScene';
 import { selectInteractionLayer, describeLayer } from '../ar/fallbackModes';
+import { ImageTracker, type MarkerResult } from '../ar/imageTracking';
 import { CuffSize } from '../entities/cuffVariants';
 
 import { LoadingScreen } from '../ui/loadingScreen';
@@ -51,6 +52,7 @@ export class ARCuffApplication {
   private readonly flags = new FeatureFlags();
   private readonly perf: PerformanceMonitor;
   private readonly xr: XrBootstrap;
+  private readonly imageTracker: ImageTracker;
 
   private readonly assets: AssetRegistry;
   private readonly textures: TextureSetProvider;
@@ -101,6 +103,12 @@ export class ARCuffApplication {
     this.perf = new PerformanceMonitor(APP_CONFIG.defaultQualityTier);
     this.xr = new XrBootstrap(this.app);
 
+    // Image tracking is a first-class, UNGATED feature (CLAUDE.md §4.1). The tracker registers a
+    // placeholder marker now; the XR bootstrap adds its images to the engine before each session
+    // start. Real marker bytes (from the Room environment assets) are supplied via setMarkerImage.
+    this.imageTracker = new ImageTracker(this.app);
+    this.xr.setImageTracker(this.imageTracker);
+
     // UI (created up-front; loading screen covers them until ready).
     this.loading = new LoadingScreen();
     this.arButton = new ArEntryButton();
@@ -149,6 +157,7 @@ export class ARCuffApplication {
     // 5) Wire UI handlers + XR lifecycle.
     this.wireUi();
     this.wireXrLifecycle();
+    this.imageTracker.onMarker((result) => this.onMarkerPose(result));
     this.updateArAvailabilityUi();
 
     // 6) Performance monitor -> quality changes.
@@ -182,6 +191,10 @@ export class ARCuffApplication {
     // Lighting estimation sync (no-op if unavailable).
     this.lighting.update();
 
+    // Image-tracking tick (ungated, allocation-free — CLAUDE.md §4.1/§2). No-op until a marker is
+    // registered with real image bytes and actively tracked in a live session.
+    this.imageTracker.update();
+
     // Interaction tick.
     if (this.cuffScene) this.cuffScene.update(dt);
 
@@ -194,6 +207,18 @@ export class ARCuffApplication {
   }
 
   private statusAccum = 0;
+  private lastMarkerId = '';
+
+  /**
+   * Consume a tracked-marker pose. Scaffold seam (CLAUDE.md §4.1): the marker world pose is
+   * available here for future anchoring of the training scene to a printed Room marker. For now it
+   * only logs when a marker is first seen (allocation-free; `result` is reused — do not retain it).
+   */
+  private onMarkerPose(result: MarkerResult): void {
+    if (result.id === this.lastMarkerId) return;
+    this.lastMarkerId = result.id;
+    log.debug(`marker "${result.id}" tracked (emulated=${result.emulated})`);
+  }
 
   // --- quality ---
 

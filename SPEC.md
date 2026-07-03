@@ -34,13 +34,18 @@ identification, tubing/gauge/Velcro inspection) on first-edition Android XR glas
   we bias toward a high but **stable** frame rate over ornamental fidelity.
 
 ### Verified platform facts (June 2026)
-Android XR's browser supports these WebXR modules: **Device API, AR Module, Gamepads, Hit Test,
-Hand Input, Anchors, Depth Sensing, Light Estimation**. It does **NOT** support WebXR
-**image/marker tracking**. **Hand Input is the default interaction.**
+Android XR's browser lists these WebXR modules: **Device API, AR Module, Gamepads, Hit Test,
+Hand Input, Anchors, Depth Sensing, Light Estimation**. Its published list does **not** currently
+enumerate WebXR **image/marker tracking**. **Hand Input is the default interaction.**
 Source: <https://developer.android.com/develop/xr/web>
 
 Implications folded into this spec:
-- We **do not** use `imageTracking` (unsupported). No marker assets are shipped.
+- We **do** use `imageTracking` as a **first-class, ungated** feature per the resolved conflict
+  decision in **CLAUDE.md §4.1**: it is built directly against the engine (`src/ar/imageTracking.ts`)
+  and is **not** wrapped in the `.supported`/fallback discipline the other features use. Marker
+  images are sourced from the **Room environment assets** (`public/assets/tracking/`); a placeholder
+  descriptor ships until the real bytes are wired. Because the Android XR docs don't yet list this
+  module, on-device support is **pending confirmation in QA** (verification reminder, not a gate).
 - We treat Hit Test, Hand Input, Anchors, Depth Sensing, Light Estimation as **available but
   capability-gated** — every one is detected at runtime and has a fallback.
 
@@ -204,7 +209,7 @@ detail. **Cuff identity (silhouette, key materials, labels) is never reduced.**
 | --- | --- | --- | --- | --- |
 | R1 | **WebXR feature variability** across device/browser (Chrome vs Comet; first-edition HW). *Biggest non-Unity risk.* | High | High | Capability detection for every feature; graceful fallback; nothing is assumed present. |
 | R2 | **Hand tracking unavailable/weak/intermittent.** | High | High | 3-layer interaction (hands → ray → place/inspect); live re-selection on track loss/regain; hysteresis on pinch. |
-| R3 | **Feature gaps vs native Android XR SDK / Unity** (no marker tracking in WebXR; fewer toggles than native). | High | Med | Scope v1 to supported WebXR modules; document gaps; isolate behind capability layer so native bridge could be added later. |
+| R3 | **Feature gaps vs native Android XR SDK / Unity** (fewer toggles than native; image tracking implemented ungated but not yet listed by Android XR docs, so on-device support is **pending QA**). | High | Med | Scope v1 to WebXR modules; image/marker tracking is built first-class & ungated (CLAUDE.md §4.1) and verified on-device in QA; document gaps; isolate behind capability layer so a native bridge could be added later. |
 | R4 | **Optical see-through additive display** washes out bright/large emissive; black is invisible. | High | Med | No skybox/background in AR; avoid emissive on physical surfaces; tune albedo/contrast for additive blend. |
 | R5 | **Thermal throttling / battery** on mobile XR SoC. | Med | High | Stable-first budget; adaptive quality; foveation; shadows off by default; clamp resolution. |
 | R6 | **No real assets yet** (model/textures pending from user). | High | Med | Procedural placeholders behind an isolated seam; `TODO:` only where a real file is required; swap-in documented. |
@@ -273,8 +278,13 @@ Runtime (requires WebXR device/browser — **cannot be verified in this environm
   per-frame depth read in v1).
 - **A3.** Optical see-through ⇒ **no camera passthrough texture** to composite; we render lit geometry
   on a transparent buffer with `clearColorBuffer = false`. `requestSceneColorMap` is **not** used.
-- **A4.** WebXR **image/marker tracking is unsupported** on Android XR ⇒ omitted entirely; no marker
-  assets. `public/assets/tracking/` is retained for structure but unused in v1.
+- **A4.** WebXR **image/marker tracking is a first-class, UNGATED feature** (CLAUDE.md §4.1): built
+  directly against the engine `imageTracking` API in `src/ar/imageTracking.ts`, requested via
+  `optionalFeatures: ['image-tracking']` + `imageTracking: true`, and **not** wrapped in the
+  `.supported`/fallback discipline the other WebXR features use. Marker images come from the Room
+  environment assets (`public/assets/tracking/`); a placeholder descriptor ships until the real bytes
+  are supplied. Android XR docs don't yet list this module, so on-device support is **pending QA**
+  (verification reminder, not a gate). See A19.
 - **A5.** No real cuff model/textures are present yet ⇒ **procedural placeholder cuff** (boxes/cylinder/
   torus primitives + procedurally generated textures) standing in, behind an isolated seam, with the
   exact same material/variant interfaces the real asset will use.
@@ -343,6 +353,13 @@ Runtime (requires WebXR device/browser — **cannot be verified in this environm
   marker shows the goal during the position step. Orientation/position tolerances are XR-interaction
   affordances, not clinical bands (SME-REVIEW). The training/animation tick is **allocation-free**
   (reused observation + validation-result structs, scratch math), consistent with §7.
+- **A19.** **Decision (CLAUDE.md §4.1):** the prior ban on WebXR image/marker tracking (old A4/R3) is
+  lifted; it is now implemented as a **first-class, ungated** feature (`src/ar/imageTracking.ts`,
+  wired through `core/xrBootstrap.ts` + `core/app.ts`) — no `.supported`/fallback gate, allocation-free
+  per-frame tick, reusing engine-native `imageTracking.add`. `config/capabilities.ts.imageTracking`
+  is informational-only and never used as a gate. A placeholder marker ships; real bytes come from the
+  Room environment assets. On-device support on Android XR is **pending QA** (their docs don't yet
+  list the module).
 
 ### Patient-arm / cuff-on-arm / IBL / tuning assumptions (this change)
 

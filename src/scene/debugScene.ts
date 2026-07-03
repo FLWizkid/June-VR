@@ -81,7 +81,7 @@ export function formatCapabilityDebug(
   }
   lines.push(
     `hands:${yn(feats.handTracking)} hit:${yn(feats.hitTest)} anchors:${yn(feats.anchors)} ` +
-      `depth:${yn(feats.depthSensing)} light:${yn(feats.lightEstimation)}`,
+      `depth:${yn(feats.depthSensing)} light:${yn(feats.lightEstimation)} img:${yn(feats.imageTracking)}`,
   );
   return lines.join('\n');
 }

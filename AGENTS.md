@@ -23,6 +23,7 @@
 
 ## WebXR / capability rules
 - Every WebXR feature (hit test, hand input, anchors, depth, light estimation) is capability-gated: detect via app.xr + .supported/.available, always provide a fallback. app.xr may be null — guard it.
+- Image/marker tracking is the ONE exception: fully supported, first-class, NO capability gate — build directly against imageTracking, no .supported/fallback wrapper. (Android XR docs don't list it yet, so confirm on-device in QA — reminder only, not a gate.) See CLAUDE.md §4.1.
 - app.xr.start() is callback-based, returns void, must be called from a user gesture. Verify XR APIs against node_modules/playcanvas/*.d.ts before use.
 - Interaction order: hands → ray → place/inspect; re-select live on capability change.
 
@@ -39,7 +40,7 @@
 ## Workflow — PLAN → TEST → VERIFY → APPLY
 1. PLAN first, get approval before implementation code: goal+scope, files touched (confirm none are do-not-touch), layer impact, runbook tagged [Claude Code]/[PlayCanvas Editor]/[Blender]/[Device Browser]/[CI], perf impact, test plan, rollback.
 2. TEST: cover state-machine transitions (valid+invalid); clinical changes reviewable without 3D/WebXR code + logged in TRAINING_LOGIC.md §7; deterministic assertions only.
-3. VERIFY: `npx tsc --noEmit` clean; `npm run build` succeeds (report bundle delta); cuff realism + XR fallbacks + null-guards intact; single inflation owner; env hidden in AR; perf budget met; do-not-touch audit clean. ⚠️ On-device WebXR verification still pending — never claim on-device correctness you didn't verify.
+3. VERIFY: `npx tsc --noEmit` clean; `npm run build` succeeds (report bundle delta); cuff realism + gated-XR fallbacks + null-guards intact (image tracking exempt per §4.1); single inflation owner; env hidden in AR; perf budget met; do-not-touch audit clean. ⚠️ On-device WebXR verification still pending (image tracking QA especially) — never claim on-device correctness you didn't verify.
 4. APPLY only after 1–3 pass. Deliver runbook + summary. If any step fails: STOP and report — never paper over failures.
 
 ## Governance

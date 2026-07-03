@@ -1,20 +1,23 @@
 /**
- * Quality panel (SPEC §8). Lets the user force a quality tier (overriding adaptive selection) and
- * cycle cuff size variants for demonstration. Plain DOM.
+ * Quality panel (SPEC §8). Lets the user force a quality tier (overriding adaptive selection),
+ * cycle cuff size variants for demonstration, and bend the patient arm's elbow. Plain DOM.
  */
 
 import { getOverlayRoot, styleAsPanel } from './overlay';
 import { QualityTier, QUALITY_ORDER, getProfile } from '../config/qualityProfiles';
 import { CuffSize, getVariant } from '../entities/cuffVariants';
+import { ARM_POSE } from '../config/trainingConfig';
 
 export class QualityPanel {
   private readonly el: HTMLElement;
   private readonly tierRow: HTMLElement;
   private readonly sizeLabel: HTMLElement;
+  private readonly elbowLabel: HTMLElement;
 
   private onTier: ((tier: QualityTier) => void) | null = null;
   private onSize: ((size: CuffSize) => void) | null = null;
   private onInflate: (() => void) | null = null;
+  private onElbow: ((deg: number) => void) | null = null;
 
   constructor() {
     this.el = document.createElement('div');
@@ -49,10 +52,41 @@ export class QualityPanel {
 
     const inflateBtn = this.makeChip('Inflate cycle', () => this.onInflate?.());
 
+    // Elbow bend: live slider over the configured flexion range, starting at the 90° rest fold.
+    const elbowRow = document.createElement('div');
+    elbowRow.style.display = 'flex';
+    elbowRow.style.alignItems = 'center';
+    elbowRow.style.gap = '6px';
+    const elbowTitle = document.createElement('span');
+    elbowTitle.textContent = 'Elbow';
+    elbowTitle.style.font = '600 12px/1 system-ui, sans-serif';
+    const elbowSlider = document.createElement('input');
+    elbowSlider.type = 'range';
+    elbowSlider.min = String(ARM_POSE.elbowFlexionRangeDeg.min);
+    elbowSlider.max = String(ARM_POSE.elbowFlexionRangeDeg.max);
+    elbowSlider.step = '1';
+    elbowSlider.value = String(ARM_POSE.elbowFlexionDeg);
+    elbowSlider.style.pointerEvents = 'auto';
+    elbowSlider.style.flex = '1';
+    elbowSlider.style.minWidth = '90px';
+    this.elbowLabel = document.createElement('span');
+    this.elbowLabel.style.opacity = '0.9';
+    this.elbowLabel.style.minWidth = '34px';
+    this.elbowLabel.textContent = `${ARM_POSE.elbowFlexionDeg}°`;
+    elbowSlider.addEventListener('input', () => {
+      const deg = Number(elbowSlider.value);
+      this.elbowLabel.textContent = `${deg}°`;
+      this.onElbow?.(deg);
+    });
+    elbowRow.appendChild(elbowTitle);
+    elbowRow.appendChild(elbowSlider);
+    elbowRow.appendChild(this.elbowLabel);
+
     this.el.appendChild(title);
     this.el.appendChild(this.tierRow);
     this.el.appendChild(sizeRow);
     this.el.appendChild(inflateBtn);
+    this.el.appendChild(elbowRow);
     getOverlayRoot().appendChild(this.el);
   }
 
@@ -62,10 +96,12 @@ export class QualityPanel {
     onTier: (tier: QualityTier) => void;
     onSize: (size: CuffSize) => void;
     onInflate: () => void;
+    onElbow: (deg: number) => void;
   }): void {
     this.onTier = handlers.onTier;
     this.onSize = handlers.onSize;
     this.onInflate = handlers.onInflate;
+    this.onElbow = handlers.onElbow;
   }
 
   /** Reflect the externally-active tier (e.g. after adaptive change). */

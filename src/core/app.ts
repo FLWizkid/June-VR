@@ -278,6 +278,9 @@ export class ARCuffApplication {
       onInflate: () => {
         this.cuffScene?.triggerInflationCycle();
       },
+      onElbow: (deg) => {
+        this.trainingScene?.setElbowFlexion(deg);
+      },
     });
 
     // Training panel: mode/next/restart wired to the training layer; status pushed from the machine.

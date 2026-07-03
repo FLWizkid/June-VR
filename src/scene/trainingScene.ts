@@ -86,6 +86,9 @@ export class TrainingScene {
     if (wrapOnArm) {
       this.cuffScene.cuff.root.addChild(this.armMount);
       this.positionArmUnderCuff(frame.node);
+      // The arm hangs below the cuff, so re-clamp the placed content above the floor plane now that
+      // the full cuff-on-arm extent is known (initial placement ran before the arm was mounted).
+      this.cuffScene.reclampPlacement();
     }
   }
 
@@ -130,6 +133,17 @@ export class TrainingScene {
   /** Show/hide the patient arm (sites that use a real manikin/arm hide it). */
   setArmVisible(visible: boolean): void {
     this.patientArm.setVisible(visible);
+  }
+
+  /**
+   * Bend the patient arm's elbow (deg of flexion; clamped by the arm). The forearm swings about the
+   * elbow, changing the content's lower extent, so the placement floor clamp is re-run — the clamp
+   * only ever lifts, so straightening the arm raises the scene if the hand would dip below the
+   * floor. UI-event rate (never per frame): the re-clamp walks the render hierarchy.
+   */
+  setElbowFlexion(deg: number): void {
+    this.patientArm.setElbowFlexion(deg);
+    this.cuffScene.reclampPlacement();
   }
 
   /** True if a real environment GLB loaded (vs procedural stand-in) — for status/README. */

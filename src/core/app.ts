@@ -273,7 +273,9 @@ export class ARCuffApplication {
         this.applyQuality(tier);
       },
       onSize: (size) => {
-        void this.cuffScene?.setSize(size);
+        // Route through the training scene: it detaches/re-mounts the arm + stethoscope around the
+        // rebuild (cuff.build clears the root's children — a bare cuffScene.setSize would destroy them).
+        void this.trainingScene?.setSize(size);
       },
       onInflate: () => {
         this.cuffScene?.triggerInflationCycle();

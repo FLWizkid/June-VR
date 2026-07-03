@@ -16,6 +16,7 @@ import * as pc from 'playcanvas';
 import { tmp } from '../utils/math';
 import {
   TRAINING_CLINICAL,
+  TRAINING_TOLERANCES,
   TrainingStepId,
   TrainingMode,
 } from '../config/trainingConfig';
@@ -169,6 +170,11 @@ export class TrainingStepController {
     this.sizeChosen = true;
     // SME-REVIEW: the demo "correct" arm is the Adult/Medium range; others are flagged WrongSize.
     this.sizeMatchesArm = size === CuffSize.Medium;
+    // A size swap REBUILDS the band, which zeroes its rotation — if the learner is mid-orient, that
+    // would silently satisfy the step. Re-apply the exercise offset so the drill stays honest.
+    if (!this.demoActive && this.machine.currentStep === TrainingStepId.OrientCuff) {
+      this.cuff.setWrapRotation(TRAINING_TOLERANCES.orientStartOffsetDeg);
+    }
   }
 
   /** Capture the current cuff pose as the placement target (call when entering the position step). */
@@ -193,6 +199,7 @@ export class TrainingStepController {
     this.targetCaptured = false;
     this.demoInflateTriggered = false;
     this.lastWrapStep = null;
+    this.cuff.setWrapRotation(0);
     this.animator.syncToCuff();
     // Restart the demo timeline if we are in demonstration mode.
     if (this.demoActive) {
@@ -217,6 +224,12 @@ export class TrainingStepController {
       if (stepId !== this.lastWrapStep) {
         this.lastWrapStep = stepId;
         this.animator.setWrapState(getStepDefinition(stepId).wrapState);
+        // Orient exercise: start the band rotated OFF the taught alignment so the learner has to
+        // rotate it back (SME-REVIEW: trainingConfig.orientStartOffsetDeg). Interactive modes only —
+        // the demonstration timeline shows the correct alignment instead.
+        if (stepId === TrainingStepId.OrientCuff) {
+          this.cuff.setWrapRotation(TRAINING_TOLERANCES.orientStartOffsetDeg);
+        }
       }
     }
 
@@ -291,23 +304,18 @@ export class TrainingStepController {
   }
 
   /**
-   * Orientation error (degrees) between the cuff and the captured target rotation. If no target is
-   * captured yet, report 0 (treated as aligned) so the orient step is satisfiable from a fresh place.
+   * Orientation error (degrees): how far the BAND is rotated around the limb away from the taught
+   * artery-marker alignment (0° = built orientation, marker over the simulated artery line). This
+   * replaced the earlier captured-reference-pose comparison once the band became rotatable — the
+   * band rotation IS the thing the orient step teaches, and it starts offset by
+   * `orientStartOffsetDeg` so there is something to correct.
    *
-   * SME-REVIEW: with no patient-arm/anatomy model shipped, "correct orientation" cannot be truly
-   * validated; this measures deviation from a captured reference pose and is a teaching affordance for
-   * the *concept* (artery marker toward the brachial artery). See TRAINING_LOGIC.md §7/§8.
-   * Allocation-free (scratch quats).
+   * SME-REVIEW: with no anatomy model shipped, the "correct" alignment is the built band orientation
+   * (a teaching affordance for the concept), not a validated landmark. See TRAINING_LOGIC.md §7.
    */
   private computeOrientationError(): number {
-    if (!this.targetCaptured) return 0;
-    const cur = this.cuff.root.getRotation();
-    // relative = inverse(target) * current
-    tmp.quatA.copy(this.targetRot).invert();
-    tmp.quatB.mul2(tmp.quatA, cur);
-    // Angle of the relative quaternion: 2*acos(|w|).
-    const w = Math.min(1, Math.abs(tmp.quatB.w));
-    return (2 * Math.acos(w) * 180) / Math.PI;
+    const a = ((this.cuff.wrapRotation % 360) + 360) % 360;
+    return Math.min(a, 360 - a);
   }
 
   /** Position error (meters) between the cuff and the captured target. */

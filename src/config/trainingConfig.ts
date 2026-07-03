@@ -110,6 +110,13 @@ export const TRAINING_TOLERANCES = {
   orientationToleranceDeg: 25,
   /** Snugness band: simulated wrap gap that reads as a correct ~1–2 finger fit (normalized 0..1). */
   snugness: { min: 0.15, max: 0.45 },
+  /**
+   * Orient-step exercise start offset (deg): entering the orient step (guided/placement) rotates the
+   * band off the taught artery-marker alignment by this much, so the learner practices rotating it
+   * back to within `orientationToleranceDeg`. SME-REVIEW: exercise scaffolding, not a claim about
+   * typical initial misalignment.
+   */
+  orientStartOffsetDeg: 120,
   /** Dwell (seconds) the user must satisfy a condition before a step auto-confirms in guided mode. */
   confirmDwellSeconds: 0.6,
 } as const;

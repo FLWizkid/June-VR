@@ -14,6 +14,7 @@
 import * as pc from 'playcanvas';
 import { tmp, distanceSq } from '../utils/math';
 import { APP_CONFIG } from '../config/appConfig';
+import { TrainingStepId } from '../config/trainingConfig';
 import { InteractionLayer } from '../core/featureFlags';
 import type { QualityProfile } from '../config/qualityProfiles';
 import type { AssetRegistry } from '../core/assetRegistry';
@@ -193,6 +194,11 @@ export class CuffScene {
     this.onValveChange = cb;
   }
 
+  /** Register the stethoscope prop with the part-interaction layer (training scene owns it). */
+  registerStethoscope(steth: Parameters<PartsController['setStethoscope']>[0]): void {
+    this.parts.setStethoscope(steth);
+  }
+
   /**
    * Desktop/phone pointer interaction (preview inspect mode). Returns true when a part was picked —
    * the app must then route move/up here and suppress camera orbit for the drag.
@@ -323,6 +329,12 @@ export class CuffScene {
     if (!this.grab.isGrabbing && this.parts.part === null) this.placement.syncToAnchor();
 
     this.parts.update(dt); // press-timing clock only
+    // Step-contextual band gesture: sideways drag tightens during confirm-fit, rotates otherwise.
+    this.parts.setBandGesture(
+      this.trainingEnabled && this.machine.currentStep === TrainingStepId.ConfirmFit
+        ? 'tighten'
+        : 'rotate',
+    );
     this.inspection.update(this.arActive, dt);
 
     // Inflation is ticked ONCE here (single owner). The animator READS its pressure for swell.

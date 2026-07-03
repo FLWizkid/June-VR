@@ -18,8 +18,11 @@ This file governs how Claude Code (and any agent/dev) extends this project. Read
 4. **Prefer modular TypeScript.** Strict mode (`strict: true`) stays on. ESM only. Small, single-
    responsibility modules matching the existing `src/` structure. Type everything; don't reach for
    `any` (narrow/guard instead). Public seams stay stable.
-5. **Avoid unnecessary dependencies.** Runtime deps: **`playcanvas` only.** Dev: `typescript`,
-   `vite`, `@types/node`. Do not add libraries for things the engine or a few lines of TS can do.
+5. **Avoid unnecessary dependencies.** Runtime deps: **`playcanvas`, `peerjs`, `qrcode`** (peerjs +
+   qrcode power the phone-mirror QR pairing). Dev: `typescript`, `vite`, `@types/node`,
+   `@types/qrcode`, `@types/webxr`. **Add nothing else without explicit approval**, and report the
+   bundle-size delta for any proposed new dependency. Do not add libraries for things the engine or a
+   few lines of TS can do.
 6. **Avoid per-frame allocations.** **No `new` (Vec3/Quat/Mat4), array, or object literals inside any
    `update`/tick/event-loop callback.** Reuse the scratch temporaries in `src/utils/math.ts` (and
    per-controller private temporaries). This is enforced by review — keep hot paths allocation-free.
@@ -52,7 +55,6 @@ This file governs how Claude Code (and any agent/dev) extends this project. Read
 - **`app.xr.start()` is callback-based and returns `void`** in the installed PlayCanvas version; it
   must be called from a **user gesture**. Verify any XR API against the real `.d.ts` in
   `node_modules/playcanvas/` before using it.
-- **No WebXR image/marker tracking** — unsupported on Android XR. Don't add it.
 - Interaction order is **hands → ray → place/inspect**; re-select live on capability change.
 - AR camera uses **`clearColorBuffer = false`** (optical see-through); no skybox/background in AR.
 
@@ -74,3 +76,61 @@ This file governs how Claude Code (and any agent/dev) extends this project. Read
   `TRAINING_LOGIC.md` §7. No second cuff forked; inflation has a single owner.
 - **Environment hidden in AR** (preview-only), transform independent of the cuff.
 - New assumptions recorded in `SPEC.md`. Docs updated if behavior/commands changed.
+
+---
+
+## Mandatory workflow — PLAN → TEST → VERIFY → APPLY
+
+Applies to any non-trivial change. **Do not write or apply implementation code until the PLAN is approved.**
+
+**1. PLAN (approval gate).** Produce a short written plan before coding:
+- **Goal & scope** — what changes, in one paragraph.
+- **Files touched** — explicit list; confirm none are in "Do-not-touch" (or name the granted exception).
+- **Layer impact** — which loop(s); confirm the engine-free `training/` brain and `config/trainingConfig.ts` clinical values are untouched (or flagged `SME-REVIEW:`).
+- **Runbook** — step-by-step, tagged by where each step runs: `[Claude Code]`, `[PlayCanvas Editor]`, `[Blender]`, `[Device Browser]`, `[CI]`. Prompt the user **only** when they must act in a tab; automate the rest.
+- **Performance impact** — expected effect on first-load, framerate, bundle size, asset budget.
+- **Test plan** — which checks/cases prove correctness.
+- **Rollback** — how to revert cleanly.
+
+Wait for explicit approval before proceeding.
+
+**2. TEST (write checks with the code).**
+- Cover the state-machine transitions touched (valid + invalid).
+- Clinical/scoring changes must be reviewable without reading 3D/WebXR code and appended to `TRAINING_LOGIC.md` §7.
+- Deterministic assertions only — no time- or random-dependent checks in scorable logic.
+
+**3. VERIFY (prove it before applying).** Confirm and report:
+- ✅ `npx tsc --noEmit` passes (strict).
+- ✅ `npm run build` succeeds; report bundle-size delta.
+- ✅ Cuff realism preserved; XR features still capability-gated with fallbacks; `app.xr` still null-guarded.
+- ✅ Training-logic integrity preserved; single inflation owner; no second cuff forked; environment hidden in AR.
+- ✅ Performance: first-load ≤ 2 s target (≤ 5 s ceiling); no framerate regression; asset budget respected.
+- ✅ Do-not-touch audit (below) confirmed clean.
+- ⚠️ **On-device WebXR verification is still pending** — flag anything needing headset validation; never claim on-device correctness you did not verify.
+
+**4. APPLY.** Only after 1–3 pass. Deliver the final runbook + a short summary: what changed, files, check results, perf numbers, and remaining on-device steps. **If any step fails, stop and report — never paper over failures to reach "done."**
+
+## Do-not-touch areas 🚫
+
+Treat as read-only unless a task **explicitly names the file and grants permission**. If a change appears to require touching one of these, **STOP and ask first**.
+
+1. **Clinical truth data** — clinical values / thresholds / step order in `config/trainingConfig.ts` and any procedure manifest may be extended **only** via the centralized edit-with-`SME-REVIEW:`-flag workflow (non-negotiable #8), logged in `TRAINING_LOGIC.md` §7. Never silently change a clinical value.
+2. **PlayCanvas engine version pin (`^2.19.7`)** and the bundler/toolchain config CI depends on (`vite.config.ts`, `tsconfig.json`, `package.json` scripts).
+3. **CI workflow** (`.github/workflows/ci.yml`) — do not weaken, skip, or disable the typecheck/build gates to "get green."
+4. **Secrets, env, and deploy config** — `.env*`, Vercel/Supabase keys, Resend controls, `vercel.json`. Never print, commit, or hard-code secrets.
+5. **Regulated-record / PHI paths** — do not add writes of assessment/PHI records here; PHI storage is gated behind BAAs + safeguards and lives in the platform repo.
+6. **Purchased/licensed art source files** — the RenderHub BP gauge Blender source and derived GLB node structure (gauge face, needle, cuff, tubing, bulb as separate meshes). Do not merge, rename, or collapse the separated meshes — the runtime drives the needle and grabs the bulb by node.
+7. **Git history / branches** — no force-push, no history rewrite, no branch deletion.
+
+Backend/platform code (Next.js/Supabase multi-tenant, RLS, AI broker, telemetry) is **out of scope for this repo** unless the task explicitly says so.
+
+## Governance & escalation
+
+- **Decision rights** — Requirements define the *outcome*; Doug (CTO/CIO) owns the *technical implementation approach*. PlayCanvas is the current direction; Unity is only a future porting option if Encountive strategically changes direction — do not reintroduce it.
+- **When to STOP and ask** (do not guess) — clinical values/thresholds/sequence, scoring-core behavior, engine/toolchain version, CI gates, secrets/PHI, licensed-asset node structure, or any do-not-touch item.
+- **Truthfulness** — Never claim a check passed, a build succeeded, or on-device behavior works unless you actually ran/verified it. Report unknowns as unknowns.
+- **Consistency** — This file is the standing contract. If a request contradicts it, surface the conflict and ask before acting.
+
+---
+
+*Repo: `FLWizkid/June-VR` · Product: Encountive Manual Blood Pressure Trainer · Handover ref: `ENC-MBPXR-SDD-v0.5` · Owner: Doug Tully (CTO). Keep this file current as the architecture evolves.*

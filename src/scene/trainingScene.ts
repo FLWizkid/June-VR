@@ -86,6 +86,9 @@ export class TrainingScene {
     if (wrapOnArm) {
       this.cuffScene.cuff.root.addChild(this.armMount);
       this.positionArmUnderCuff(frame.node);
+      // The arm hangs below the cuff, so re-clamp the placed content above the floor plane now that
+      // the full cuff-on-arm extent is known (initial placement ran before the arm was mounted).
+      this.cuffScene.reclampPlacement();
     }
   }
 

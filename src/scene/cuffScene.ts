@@ -141,6 +141,16 @@ export class CuffScene {
     this.onInputChange = cb;
   }
 
+  /**
+   * Re-run the placement floor clamp. Called once by the training scene after it mounts the patient
+   * arm under the cuff root (the arm hangs below the cuff and extends the content's lower bound).
+   * Build-time only — never per frame (the clamp walks the render hierarchy).
+   */
+  reclampPlacement(): void {
+    this.placement.clampAboveFloor();
+    this.cuff.invalidateAabb();
+  }
+
   /** Swap the cuff size variant. Re-syncs the animator and informs the training layer. */
   async setSize(size: CuffSize): Promise<void> {
     await this.cuff.setSize(size);

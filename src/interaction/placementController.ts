@@ -15,6 +15,15 @@ import type { HitTestPlacement } from '../ar/hitTestPlacement';
 import type { AnchorManager } from '../ar/anchors';
 import type { BloodPressureCuff } from '../entities/bloodPressureCuff';
 
+/**
+ * Floor plane (m, world space) the placed content is clamped ABOVE, plus the clearance kept over it.
+ * y=0 is the preview stand-in floor (entities/environmentRoot.ts) AND the physical floor in a
+ * `local-floor` AR reference space, so the clamp keeps the hanging patient arm from poking through
+ * either. Clearance clears the preview grid lines (top ≈ 0.005). Cosmetic/spatial, not clinical.
+ */
+const FLOOR_PLANE_Y = 0;
+const FLOOR_CLEARANCE_M = 0.01;
+
 export class PlacementController {
   private readonly cuff: BloodPressureCuff;
   private readonly hitTest: HitTestPlacement;
@@ -85,14 +94,43 @@ export class PlacementController {
   private placeAt(position: pc.Vec3, rotation: pc.Quat): void {
     this.cuff.root.setPosition(position);
     this.cuff.root.setRotation(rotation);
+    // Clamp BEFORE anchoring so the anchor holds the clamped pose (syncToAnchor re-applies it).
+    this.clampAboveFloor();
     this.cuff.invalidateAabb();
     this.placed = true;
     this.reticle.enabled = false;
 
     // Best-effort anchor for drift resistance (non-blocking; cuff already positioned).
     if (this.anchors.supported) {
-      void this.anchors.anchorAt(position, rotation);
+      void this.anchors.anchorAt(this.cuff.root.getPosition(), rotation);
     }
+  }
+
+  /**
+   * Lift the placed cuff — and everything mounted under its root, i.e. the patient arm riding it —
+   * so the content's lowest point rests above the floor plane. Never lowers (a hit-test surface
+   * placement above the floor is left where it landed). PLACEMENT-TIME ONLY: findComponents
+   * allocates, so this must never run per frame. Public so the training scene can re-clamp once
+   * after mounting the arm under the cuff root (which extends the content's lower bound).
+   */
+  clampAboveFloor(): void {
+    const renders = this.cuff.root.findComponents('render') as pc.RenderComponent[];
+    let minY = Infinity;
+    for (const render of renders) {
+      const instances = render.meshInstances ?? [];
+      for (const mi of instances) {
+        const box = mi.aabb; // world-space AABB of this mesh instance
+        const bottom = box.center.y - box.halfExtents.y;
+        if (bottom < minY) minY = bottom;
+      }
+    }
+    if (!Number.isFinite(minY)) return;
+
+    const lift = FLOOR_PLANE_Y + FLOOR_CLEARANCE_M - minY;
+    if (lift <= 0) return;
+    const p = this.cuff.root.getPosition();
+    this.cuff.root.setPosition(p.x, p.y + lift, p.z);
+    this.cuff.invalidateAabb();
   }
 
   /**

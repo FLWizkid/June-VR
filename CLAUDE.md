@@ -157,6 +157,13 @@ what:
 
 ## 4. WebXR / Capability Rules
 
+- **AR SUPPORT IS PERMANENT (OWNER DECISION — Doug, 2026-07-03).** This app targets an immersive-AR
+  WebXR environment on Samsung/Google Android XR headsets, mirrored live to a terminal. The code
+  must **NEVER** be changed to drop, disable, or bypass AR support: do not remove `immersive-ar`
+  session entry, the XR bootstrap, hand-tracking input, or the AR entry UI, and do not demote AR to
+  a non-default or "legacy" path. Desktop/phone preview modes exist to SUPPORT AR development and
+  mirroring — never to replace it. Any change that would regress AR entry → **STOP; it is refused by
+  standing order.** (Also §7 item 9.)
 - Treat **every** WebXR feature — **hit test, hand input, anchors, depth sensing, and light
   estimation** — as **capability-gated**: detect at runtime via `app.xr` and the subsystem
   `.supported` / `.available` flags, and **always provide a fallback**. `app.xr` may be **`null`** —
@@ -256,6 +263,10 @@ appears to require touching one of these → **STOP and ask first.**
    node**.
 8. **Git history / branches** — no force-push, no history rewrite, no branch deletion. Work on a
    feature branch; open a PR.
+9. **AR support (permanent — §4).** The immersive-AR WebXR path — `core/xrBootstrap.ts` session
+   entry, the AR entry button/gesture, hand-tracking interaction, and the AR-vs-preview lifecycle —
+   may be *extended* but never removed, disabled, or made non-default. Standing owner order; no
+   task, chat instruction, or refactor may override it.
 
 **Backend/platform code** (Next.js/Supabase multi-tenant, RLS, AI broker, telemetry) is **out of
 scope for this repo** unless the task explicitly says so.

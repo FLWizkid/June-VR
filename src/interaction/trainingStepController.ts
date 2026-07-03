@@ -67,6 +67,14 @@ export class TrainingStepController {
   /** Whether training is the active interaction modality (vs raw inspect). */
   private active = false;
 
+  /**
+   * Last step whose wrap state was applied. The step's wrap state is a baseline applied ON STEP
+   * ENTRY only — never re-applied per frame — so the learner's own tighten adjustments (the band
+   * tighten gesture that satisfies the confirm-fit step) are not stomped every frame. Previously the
+   * per-frame re-apply pinned snugness at the step target, making confirm-fit unsatisfiable.
+   */
+  private lastWrapStep: TrainingStepId | null = null;
+
   // --- observation accumulators ---
   private sizeChosen = false;
   private sizeMatchesArm = true; // medium is the assumed-correct demo size (SME-REVIEW)
@@ -184,6 +192,7 @@ export class TrainingStepController {
     this.deflationRate = 0;
     this.targetCaptured = false;
     this.demoInflateTriggered = false;
+    this.lastWrapStep = null;
     this.animator.syncToCuff();
     // Restart the demo timeline if we are in demonstration mode.
     if (this.demoActive) {
@@ -205,7 +214,10 @@ export class TrainingStepController {
       this.timeline.update(dt);
     } else {
       const stepId = this.machine.currentStep;
-      this.animator.setWrapState(getStepDefinition(stepId).wrapState);
+      if (stepId !== this.lastWrapStep) {
+        this.lastWrapStep = stepId;
+        this.animator.setWrapState(getStepDefinition(stepId).wrapState);
+      }
     }
 
     const stepId = this.machine.currentStep;

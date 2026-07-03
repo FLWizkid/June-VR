@@ -22,6 +22,7 @@
 - Environment is preview-only: disabled during any XR/AR session (optical see-through). AR camera uses clearColorBuffer=false; no skybox in AR.
 
 ## WebXR / capability rules
+- AR SUPPORT IS PERMANENT (owner decision, 2026-07-03): the immersive-AR path (xrBootstrap session entry, AR entry UI, hand tracking, AR-vs-preview lifecycle) may be extended but NEVER removed, disabled, or made non-default. Preview modes support AR; they never replace it. See CLAUDE.md §4 + §7 item 9.
 - Every WebXR feature (hit test, hand input, anchors, depth, light estimation) is capability-gated: detect via app.xr + .supported/.available, always provide a fallback. app.xr may be null — guard it.
 - Image/marker tracking is the ONE exception: fully supported, first-class, NO capability gate — build directly against imageTracking, no .supported/fallback wrapper. (Android XR docs don't list it yet, so confirm on-device in QA — reminder only, not a gate.) See CLAUDE.md §4.1.
 - app.xr.start() is callback-based, returns void, must be called from a user gesture. Verify XR APIs against node_modules/playcanvas/*.d.ts before use.

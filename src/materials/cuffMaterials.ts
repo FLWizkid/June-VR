@@ -23,7 +23,8 @@ export type CuffMaterialId =
   | 'gaugeFace'
   | 'needle'
   | 'lens'
-  | 'metalTrim';
+  | 'metalTrim'
+  | 'arteryMarker';
 
 export const CUFF_MATERIAL_IDS: readonly CuffMaterialId[] = [
   'fabric',
@@ -38,6 +39,7 @@ export const CUFF_MATERIAL_IDS: readonly CuffMaterialId[] = [
   'needle',
   'lens',
   'metalTrim',
+  'arteryMarker',
 ];
 
 const col = (r: number, g: number, b: number): pc.Color => new pc.Color(r, g, b);
@@ -74,6 +76,8 @@ const BASE_PARAMS: Record<CuffMaterialId, PbrParams> = {
   lens: { diffuse: col(0.9, 0.92, 0.95), metalness: 0.0, roughness: 0.08, opacity: 0.22 },
   // Chrome/steel bezel and ferrules.
   metalTrim: { diffuse: col(0.8, 0.81, 0.83), metalness: 1.0, roughness: 0.2 },
+  // Artery index marker — printed bright red strip on the band (teaching landmark; matte print).
+  arteryMarker: { diffuse: col(0.78, 0.12, 0.12), metalness: 0.0, roughness: 0.6, twoSided: true },
 };
 
 /**

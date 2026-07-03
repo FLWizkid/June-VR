@@ -74,6 +74,20 @@ export const DEVICE_SCREEN_REGION = {
   max: { x: 0.09, y: 0.05, z: -0.25 },
 } as const;
 
+/**
+ * Procedural coiled hose connecting the CUFF BAND to the GAUGE DEVICE (composite mode) — the
+ * counterpart of the GLB's baked bulb coil, so the cuff visibly plumbs into the meter. Geometry is
+ * a stretched helix between two ports; segment TRANSFORMS (never geometry) are recomputed whenever
+ * an endpoint moves (band slide / device drag / build) — event-rate only, allocation-free.
+ * The device port is in the GLB's mesh-local space (where the baked coil meets the housing);
+ * cosmetic, finalized on-device.
+ */
+const HOSE_SEGMENTS = 72;
+const HOSE_COIL_TURNS = 8;
+const HOSE_COIL_RADIUS = 0.009;
+const HOSE_TUBE_RADIUS = 0.0045;
+const HOSE_DEVICE_PORT_MESH = { x: -0.055, y: -0.01, z: -0.25 } as const;
+
 export class BloodPressureCuff {
   /** Root entity; parent this under the world/anchor root. */
   readonly root: pc.Entity;
@@ -126,6 +140,26 @@ export class BloodPressureCuff {
   /** Current band slide offset (m) along the limb axis (cuff-local Y). */
   private wrapSlideY = 0;
 
+  // --- cuff↔device connecting hose (composite mode) ---
+  private hoseRoot: pc.Entity | null = null;
+  private readonly hoseSegments: pc.Entity[] = [];
+  private readonly hoseMeshInstancesList: pc.MeshInstance[] = [];
+  private readonly hoseAabb = new pc.BoundingBox();
+  /** Band dimensions captured at build (for the hose's band-side port). */
+  private bandOuterRadius = 0;
+  private bandWidthAlong = 0;
+  /** Private hose-math scratch (event-rate transform updates; no allocation). */
+  private readonly hoseTmpA = new pc.Vec3();
+  private readonly hoseTmpB = new pc.Vec3();
+  private readonly hoseTmpT = new pc.Vec3();
+  private readonly hoseTmpSide = new pc.Vec3();
+  private readonly hoseTmpUp = new pc.Vec3();
+  private readonly hoseTmpP0 = new pc.Vec3();
+  private readonly hoseTmpP1 = new pc.Vec3();
+  private readonly hoseTmpDir = new pc.Vec3();
+  private readonly hoseTmpAxis = new pc.Vec3();
+  private readonly hoseTmpQuat = new pc.Quat();
+
   /** Cached world-space AABB and the parameters it was computed for. */
   private readonly cachedAabb = new pc.BoundingBox();
   private aabbDirty = true;
@@ -170,6 +204,9 @@ export class BloodPressureCuff {
     this.allMeshInstances.length = 0;
     this.bandMeshInstances.length = 0;
     this.deviceMeshInstances.length = 0;
+    this.hoseMeshInstancesList.length = 0;
+    this.hoseSegments.length = 0;
+    this.hoseRoot = null;
     this.deviceEntityRef = null;
     this.wrapSlideY = 0;
     this.needle = null;
@@ -188,8 +225,9 @@ export class BloodPressureCuff {
     // by contrast, is laid out BESIDE the device via WRAP_OFFSET in composite mode.
     const wrapOffset = this.armWrapRadius !== null ? null : WRAP_OFFSET;
     if (deviceLoaded) {
-      // Composite: real gauge device + procedural, size-specific fabric arm wrap.
+      // Composite: real gauge device + procedural, size-specific fabric arm wrap + connecting hose.
       this.buildCuffWrap(variant, wrapOffset);
+      this.buildConnectingHose();
     } else {
       // Full procedural fallback (no real asset): wrap + hardware together at the origin.
       this.buildCuffWrap(variant, null);
@@ -255,6 +293,7 @@ export class BloodPressureCuff {
     this.wrapSlideY = y;
     const p = body.getLocalPosition();
     body.setLocalPosition(p.x, y, p.z);
+    this.refreshHose();
     this.aabbDirty = true;
   }
 
@@ -271,6 +310,112 @@ export class BloodPressureCuff {
   /** World AABB of the device GLB (for part picking). Reuses a private box; do not retain. */
   deviceWorldAabb(): pc.BoundingBox | null {
     return unionAabb(this.deviceMeshInstances, this.deviceAabb);
+  }
+
+  /** World AABB of the cuff↔device hose (grabbable: drags the device unit). Null when absent. */
+  hoseWorldAabb(): pc.BoundingBox | null {
+    return unionAabb(this.hoseMeshInstancesList, this.hoseAabb);
+  }
+
+  /**
+   * Re-lay the connecting hose after an endpoint moved (band slide does this itself; the parts
+   * controller calls it after device drags). Event-rate only; transform updates, no allocation.
+   */
+  refreshHose(): void {
+    this.updateHosePath();
+  }
+
+  /**
+   * Build the cuff↔device coiled hose: fixed segment ENTITIES once; their transforms are laid along
+   * a stretched helix between the band port and the device port by updateHosePath(). Composite +
+   * arm-band mode only (the full-procedural fallback has its own tubing).
+   */
+  private buildConnectingHose(): void {
+    if (!this.deviceEntityRef || !this.wrapIsBand || this.bandOuterRadius <= 0) return;
+    const root = new pc.Entity('cuff-hose');
+    this.root.addChild(root);
+    this.hoseRoot = root;
+    for (let i = 0; i < HOSE_SEGMENTS; i++) {
+      const seg = this.makeMeshEntity(
+        `hose-seg-${i}`,
+        this.cylinderMesh(HOSE_TUBE_RADIUS, 1, 10),
+        'stitching', // light-grey matte — matches the GLB's baked bulb coil
+      );
+      root.addChild(seg);
+      this.hoseSegments.push(seg);
+      const render = seg.render;
+      if (render) for (const mi of render.meshInstances ?? []) this.hoseMeshInstancesList.push(mi);
+    }
+    this.updateHosePath();
+  }
+
+  /** Point on the stretched helix at fraction s ∈ [0,1] (writes `out`). Allocation-free. */
+  private hosePointAt(s: number, length: number, out: pc.Vec3): void {
+    // Coil radius ramps to 0 near the ports so the hose visually meets both ends.
+    const ramp = Math.min(1, Math.min(s, 1 - s) / 0.08);
+    const r = HOSE_COIL_RADIUS * ramp;
+    const theta = s * HOSE_COIL_TURNS * Math.PI * 2;
+    const c = Math.cos(theta) * r;
+    const k = Math.sin(theta) * r;
+    const d = length * s;
+    out.set(
+      this.hoseTmpA.x + this.hoseTmpT.x * d + this.hoseTmpSide.x * c + this.hoseTmpUp.x * k,
+      this.hoseTmpA.y + this.hoseTmpT.y * d + this.hoseTmpSide.y * c + this.hoseTmpUp.y * k,
+      this.hoseTmpA.z + this.hoseTmpT.z * d + this.hoseTmpSide.z * c + this.hoseTmpUp.z * k,
+    );
+  }
+
+  /** Recompute all hose segment transforms between the current band/device ports. */
+  private updateHosePath(): void {
+    const device = this.deviceEntityRef;
+    if (!this.hoseRoot || !device || this.hoseSegments.length === 0) return;
+
+    // Band port (cuff-local): top rim of the band on its +Z face, riding the slide offset.
+    this.hoseTmpA.set(0, this.wrapSlideY + this.bandWidthAlong * 0.5, this.bandOuterRadius * 0.9);
+    // Device port (cuff-local): mesh-local port transformed by the device's local pose.
+    this.hoseTmpB.set(HOSE_DEVICE_PORT_MESH.x, HOSE_DEVICE_PORT_MESH.y, HOSE_DEVICE_PORT_MESH.z);
+    device.getLocalRotation().transformVector(this.hoseTmpB, this.hoseTmpB);
+    this.hoseTmpB.add(device.getLocalPosition());
+
+    // Chord frame: tangent + two perpendiculars for the helix plane.
+    this.hoseTmpT.sub2(this.hoseTmpB, this.hoseTmpA);
+    const length = this.hoseTmpT.length();
+    if (length < 1e-4) return;
+    this.hoseTmpT.mulScalar(1 / length);
+    // side = tangent × worldY (fall back to X when near-vertical).
+    this.hoseTmpSide.set(this.hoseTmpT.z, 0, -this.hoseTmpT.x);
+    if (this.hoseTmpSide.lengthSq() < 1e-6) this.hoseTmpSide.set(1, 0, 0);
+    this.hoseTmpSide.normalize();
+    this.hoseTmpUp.cross(this.hoseTmpT, this.hoseTmpSide).normalize();
+
+    const n = this.hoseSegments.length;
+    for (let i = 0; i < n; i++) {
+      this.hosePointAt(i / n, length, this.hoseTmpP0);
+      this.hosePointAt((i + 1) / n, length, this.hoseTmpP1);
+      const seg = this.hoseSegments[i];
+      if (!seg) continue;
+      this.hoseTmpDir.sub2(this.hoseTmpP1, this.hoseTmpP0);
+      const segLen = this.hoseTmpDir.length();
+      if (segLen < 1e-6) continue;
+      this.hoseTmpDir.mulScalar(1 / segLen);
+      // Orient the (Y-axis) cylinder along the segment direction.
+      const dot = Math.max(-1, Math.min(1, this.hoseTmpDir.y)); // dot(Y, dir)
+      this.hoseTmpAxis.set(this.hoseTmpDir.z, 0, -this.hoseTmpDir.x); // Y × dir
+      if (this.hoseTmpAxis.lengthSq() < 1e-8) {
+        this.hoseTmpAxis.set(1, 0, 0);
+      } else {
+        this.hoseTmpAxis.normalize();
+      }
+      this.hoseTmpQuat.setFromAxisAngle(this.hoseTmpAxis, (Math.acos(dot) * 180) / Math.PI);
+      seg.setLocalRotation(this.hoseTmpQuat);
+      seg.setLocalPosition(
+        (this.hoseTmpP0.x + this.hoseTmpP1.x) * 0.5,
+        (this.hoseTmpP0.y + this.hoseTmpP1.y) * 0.5,
+        (this.hoseTmpP0.z + this.hoseTmpP1.z) * 0.5,
+      );
+      seg.setLocalScale(1, segLen * 1.15, 1); // slight overlap hides the joints
+    }
+    this.aabbDirty = true;
   }
 
   /**
@@ -340,21 +485,27 @@ export class BloodPressureCuff {
     bezel.setLocalPosition(0, 0.001, 0);
     overlay.addChild(bezel);
 
-    // The pivot is what the gauge controller rotates (setLocalEulerAngles(0, angle, 0)). The carrier
-    // between overlay and pivot fixes the zero direction + sweep sense so the needle tracks the dial
-    // art (which sweeps clockwise); the values were calibrated against the rendered art.
+    // The pivot is what the gauge controller rotates (setLocalEulerAngles(0, angle, 0)). Two fixed
+    // frames between overlay and pivot align the needle with the dial art AS RENDERED: the art
+    // canvas lands mirrored on the cylinder cap, giving a screen-angle law φ(v) = 315° − 0.9°·v
+    // (measured from the red danger arc's rendered position). The 180° roll flips the pivot's sweep
+    // to match the art's clockwise sense, and the +90° trim aligns the zero tick; together:
+    // φ_needle = 270 − (θ + 90) = 315 − 0.9·v = φ_art for the controller's θ(v) = −135 + 0.9·v.
     const carrier = new pc.Entity('overlay-needle-carrier');
     carrier.setLocalPosition(0, 0.003, 0);
     carrier.setLocalEulerAngles(0, 0, 180);
     overlay.addChild(carrier);
+    const trim = new pc.Entity('overlay-needle-trim');
+    trim.setLocalEulerAngles(0, 90, 0);
+    carrier.addChild(trim);
     const pivot = new pc.Entity('needle');
-    carrier.addChild(pivot);
+    trim.addChild(pivot);
     const needleMesh = this.makeMeshEntity(
       'overlay-needle-mesh',
       this.boxMesh(0.0028, 0.0012, DEVICE_DIAL.radius * 0.85),
       'needle',
     );
-    // Local −y: the carrier's 180° roll mirrors it back to +y in overlay space (above the face).
+    // Local −y: the carrier's 180° roll mirrors it back above the face in overlay space.
     needleMesh.setLocalPosition(0, -0.0012, DEVICE_DIAL.radius * 0.33);
     pivot.addChild(needleMesh);
     this.needle = pivot;
@@ -503,6 +654,22 @@ export class BloodPressureCuff {
     );
     label.setLocalPosition(0, 0, outerR + 0.001);
     group.addChild(label);
+
+    // Artery index marker: a small bright strip at the band's LOWER edge, arc-center (+Z). Teaching
+    // affordance for the inspect/orient steps ("artery marker toward the brachial artery").
+    // SME-REVIEW: the marker's position/orientation is illustrative, not a validated landmark
+    // (TRAINING_LOGIC.md §7 items 10–11).
+    const marker = this.makeMeshEntity(
+      'artery-marker',
+      this.boxMesh(staveChord * 0.35, bandWidth * 0.28, 0.0018),
+      'arteryMarker',
+    );
+    marker.setLocalPosition(0, -bandWidth * 0.34, outerR + 0.0015);
+    group.addChild(marker);
+
+    // Remember band dimensions for the connecting hose's band-side port.
+    this.bandOuterRadius = outerR;
+    this.bandWidthAlong = bandWidth;
   }
 
   /**

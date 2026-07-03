@@ -154,7 +154,18 @@ Each item is also flagged `SME-REVIEW:` at its source. None is asserted as clini
     correctness is still scored against a **captured target pose**, not arm anatomy (see §8). The
     band is also **runtime-slidable** along the upper-arm segment (drag), which does not change the
     scored target pose.
-12. **Manual pump / valve / heartbeat cue** (`PUMP_INTERACTION` in `config/trainingConfig.ts`;
+12. **Fit adjustment + step wrap-state baseline** (`interaction/partsController.ts`,
+    `interaction/trainingStepController.ts`). The learner adjusts snugness by dragging the band
+    sideways ("pull the strap around the arm"); each step's wrap state is applied as a baseline on
+    step entry only. The snugness pass band remains `TRAINING_TOLERANCES.snugness` (item 6). The
+    gesture-to-snugness mapping (0.22 m of drag = full range) is an interaction affordance,
+    not a clinical claim.
+13. **Artery index marker visual + dial markers** (`entities/bloodPressureCuff.ts`,
+    `materials/textureSets.ts`). The band now shows a red artery-marker strip (lower edge,
+    arc-center) and the procedural dial art draws the demo systolic (red) / diastolic (green)
+    markers plus a 260–300 mmHg red zone. All positions/values are illustrative teaching cues
+    pending SME confirmation (marker landmark: item 11; demo values: item 4).
+14. **Manual pump / valve / heartbeat cue** (`PUMP_INTERACTION` in `config/trainingConfig.ts`;
     `interaction/inflationController.ts`). The trainee can pump the bulb (each squeeze **+15 mmHg**,
     plausible but not device-measured), and work a 3-state release valve (**closed → controlled →
     open**; controlled reuses `controlledDeflateMmHgPerSec`, full-open dumps at **40 mmHg/s**, an

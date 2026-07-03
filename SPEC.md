@@ -474,9 +474,28 @@ Runtime (requires WebXR device/browser — **cannot be verified in this environm
   is mirrored by the cap UVs and its text is illegible at this size regardless). (4) Manual
   pump/valve piggyback on the SAME inflation owner and surface the SAME phases the training brain
   already observes (pump→inflating, reserve empty→holding, valve→deflating), so no state-machine or
-  scoring change; the heartbeat bounce is displayed-value-only (TRAINING_LOGIC §7 item 12).
+  scoring change; the heartbeat bounce is displayed-value-only (TRAINING_LOGIC §7 item 14).
   (5) The preview orbit camera now also clamps above the floor (a low target + long zoom could put
   the eye under y=0, where a grazing grid line rendered as a huge dark wedge — root cause of the
   artifact first seen after the arm-yaw change), and its orbit target is smoothed so assembly drags
   read as the object moving rather than the world sliding. All per-frame paths stay allocation-free;
   picking/drag math runs at input-event rate.
+- **A29.** **Guided-practice completeness + cuff↔gauge hose (screenshot-driven gap fixes).**
+  (1) **Connecting hose**: a procedural coiled hose (stretched helix of fixed cylinder segments;
+  transform-only updates at event rate) now runs from the band's upper rim to a device-local port,
+  visually matching the GLB's baked bulb coil; it re-lays on band slide / device drag / build, and
+  it is grabbable (drags the device unit — the shipped GLB being one mesh, gauge/hose/bulb stay one
+  connected apparatus). The device-side port is a mesh-local constant, finalized on-device.
+  (2) **Confirm-fit was unsatisfiable**: guided mode re-applied the step's wrap state EVERY frame,
+  pinning snugness at the step target (1.0 = permanently "too tight", outside the 0.15–0.45 pass
+  band) with no learner control. Wrap state is now a baseline applied on step ENTRY only, and the
+  band drag gained a TIGHTEN gesture (sideways component = pull the strap around the arm; along-limb
+  component still slides), so the learner can actually reach the pass band.
+  (3) **Artery index marker**: the inspect/orient steps name it; a red printed strip now sits at the
+  band's lower edge, arc-center (SME-REVIEW: illustrative landmark, TRAINING_LOGIC §7 items 10–11).
+  (4) **Dial markers**: the observe step says "watch the needle fall through the systolic and
+  diastolic markers on the dial" — the procedural dial art now draws red/green markers at the demo
+  systolic/diastolic values (from TRAINING_CLINICAL) plus the red 260–300 danger zone from the
+  CLAUDE.md gauge spec. (5) **AR permanence**: CLAUDE.md §4 + §7 item 9 (mirrored in AGENTS.md /
+  .cursorrules) now record the standing owner order that immersive-AR support may never be removed,
+  disabled, or made non-default; preview modes support AR and the terminal mirror, never replace it.

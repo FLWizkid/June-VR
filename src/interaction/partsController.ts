@@ -32,6 +32,7 @@ import {
   DEVICE_BULB_REGION,
   DEVICE_SCREEN_REGION,
 } from '../entities/bloodPressureCuff';
+import type { CuffAnimator } from '../animation/cuffAnimator';
 import type { InflationController, ValveState } from './inflationController';
 
 export const enum CuffPart {
@@ -52,11 +53,17 @@ const FLOOR_Y = 0.01;
 /** Band slide margins (m) from the elbow/shoulder ends of the upper-arm segment. */
 const BAND_MARGIN_ELBOW = 0.005;
 const BAND_MARGIN_SHOULDER = 0.015;
+/**
+ * Band-drag TIGHTEN gesture: the drag component perpendicular to the limb axis (pulling the strap
+ * around the arm) adjusts snugness. Full range over this many meters of sideways drag.
+ */
+const TIGHTEN_FULL_RANGE_M = 0.22;
 
 export class PartsController {
   private readonly cuff: BloodPressureCuff;
   private readonly camera: pc.Entity;
   private readonly inflation: InflationController;
+  private readonly animator: CuffAnimator;
   /** Fired when a press changes the valve (so UI can reflect the new state). */
   private onValveChange: ((state: ValveState) => void) | null = null;
   /** Fired when an assembly drag ends (cuff scene re-runs the floor clamp). */
@@ -77,13 +84,20 @@ export class PartsController {
   private pressStartClock = 0;
   private pressCandidate = false;
   private startSlide = 0;
+  private startTighten = 0;
   /** True when the current gesture came from the hand path (point-driven, no ray). */
   private handGesture = false;
 
-  constructor(cuff: BloodPressureCuff, camera: pc.Entity, inflation: InflationController) {
+  constructor(
+    cuff: BloodPressureCuff,
+    camera: pc.Entity,
+    inflation: InflationController,
+    animator: CuffAnimator,
+  ) {
     this.cuff = cuff;
     this.camera = camera;
     this.inflation = inflation;
+    this.animator = animator;
   }
 
   setOnValveChange(cb: (state: ValveState) => void): void {
@@ -167,6 +181,7 @@ export class PartsController {
     this.planeNormal.copy(this.camera.forward).normalize();
     this.startRootPos.copy(this.cuff.root.getPosition());
     this.startSlide = this.cuff.wrapSlide;
+    this.startTighten = this.animator.tightenAmount;
     const device = this.cuff.deviceEntity;
     if (device) this.startDeviceLocal.copy(device.getLocalPosition());
   }
@@ -231,7 +246,11 @@ export class PartsController {
     this.cuff.invalidateAabb();
   }
 
-  /** Band: project the drag onto the limb axis and slide within the upper-arm segment. */
+  /**
+   * Band: decompose the drag against the limb axis. The ALONG-limb component slides the band within
+   * the upper-arm segment; the PERPENDICULAR (sideways, "pull the strap around the arm") component
+   * adjusts snugness/tightness — this is how the trainee satisfies the confirm-fit step.
+   */
   private dragBand(point: pc.Vec3): void {
     // Limb axis = cuff-root local +Y in world space.
     this.cuff.root.getWorldTransform().getY(tmp.vecA);
@@ -247,6 +266,15 @@ export class PartsController {
     if (min > max) min = max = 0; // band wider than the segment: pin at the built site
 
     this.cuff.setWrapSlide(clamp(this.startSlide + along, min, max));
+
+    // Tighten: signed sideways component (limbAxis × cameraForward gives the screen-horizontal
+    // tangent). Drag right = tighter, left = looser.
+    tmp.vecC.cross(tmp.vecA, this.planeNormal);
+    if (tmp.vecC.lengthSq() > 1e-6) {
+      tmp.vecC.normalize();
+      const sideways = tmp.vecB.dot(tmp.vecC);
+      this.animator.setTightenTarget(clamp(this.startTighten + sideways / TIGHTEN_FULL_RANGE_M, 0, 1));
+    }
   }
 
   /** Device unit: translate its cuff-local offset by the drag delta, leashed + floor-clamped. */
@@ -273,6 +301,8 @@ export class PartsController {
       tmp.vecC.add(tmp.vecE);
       device.setLocalPosition(tmp.vecC);
     }
+    // The connecting hose is anchored to the device — re-lay it for the new pose (event-rate).
+    this.cuff.refreshHose();
     this.cuff.invalidateAabb();
   }
 
@@ -302,6 +332,9 @@ export class PartsController {
     if (band && band.intersectsRay(this.ray, this.hitPoint)) return CuffPart.Band;
     const deviceBox = this.cuff.deviceWorldAabb();
     if (deviceBox && deviceBox.intersectsRay(this.ray, this.hitPoint)) return CuffPart.Device;
+    // The connecting hose is grabbable and drags the device unit (it is plumbed into it).
+    const hoseBox = this.cuff.hoseWorldAabb();
+    if (hoseBox && hoseBox.intersectsRay(this.ray, this.hitPoint)) return CuffPart.Device;
     const whole = this.cuff.worldAabb();
     if (whole.intersectsRay(this.ray, this.hitPoint)) return CuffPart.Assembly;
     return null;
@@ -363,6 +396,8 @@ export class PartsController {
     if (band && containsWithMargin(band, point, 0.02)) return CuffPart.Band;
     const deviceBox = this.cuff.deviceWorldAabb();
     if (deviceBox && containsWithMargin(deviceBox, point, 0.02)) return CuffPart.Device;
+    const hoseBox = this.cuff.hoseWorldAabb();
+    if (hoseBox && containsWithMargin(hoseBox, point, 0.02)) return CuffPart.Device;
     return null; // assembly / empty space → default whole grab
   }
 

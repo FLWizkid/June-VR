@@ -104,14 +104,16 @@ export class CuffScene {
     this.inspection = new InspectionController(this.cuff, deps.materials, deps.camera);
     this.gauge = new GaugeController(this.cuff);
     this.inflation = new InflationController(this.gauge);
-    this.parts = new PartsController(this.cuff, deps.camera, this.inflation);
+
+    // Procedural animation + training scaffolding driving the EXISTING cuff (no second cuff).
+    this.animator = new CuffAnimator(this.cuff, this.inflation);
+
+    // Per-part interaction needs the animator (band tighten gesture), so it is created after it.
+    this.parts = new PartsController(this.cuff, deps.camera, this.inflation, this.animator);
     this.parts.setOnAssemblyDropped(() => this.placement.clampAboveFloor());
     this.parts.setOnValveChange((state) => {
       if (this.onValveChange) this.onValveChange(state);
     });
-
-    // Procedural animation + training scaffolding driving the EXISTING cuff (no second cuff).
-    this.animator = new CuffAnimator(this.cuff, this.inflation);
     this.machine = new ProcedureStateMachine();
     this.targetMarker = createTargetMarker(deps.device);
     deps.worldRoot.addChild(this.targetMarker);

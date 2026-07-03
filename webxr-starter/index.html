@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>PlayCanvas WebXR Starter — Android XR</title>
+  </head>
+  <body>
+    <!-- The 3D scene renders into this canvas (full window). -->
+    <canvas id="app-canvas"></canvas>
+
+    <!-- The DOM status panel + Enter VR button live here. It is visible on desktop and before you
+         enter XR. NOTE: inside an immersive VR session the headset shows only the 3D scene, so the
+         in-world "sign" (a 3D panel) carries the text you read while wearing the headset. -->
+    <div id="ui-root"></div>
+
+    <!-- Everything is plain ES modules. Vite bundles this for `npm run build`. -->
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

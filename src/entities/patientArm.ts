@@ -6,8 +6,11 @@
  *     AssetRegistry.loadContainer) and used as-is. Drop a real arm/manikin mesh there and it
  *     replaces the procedural stand-in with no other code change.
  *   - PROCEDURAL (default, no assets): a plausible upper-arm + elbow + forearm + hand built once from
- *     tapered cones/spheres with a single matte skin-tone PBR material (no game-gloss). Pose +
- *     dimensions come from `ARM_POSE` in config/trainingConfig.ts.
+ *     tapered cones, joint spheres and a rounded hand capsule with a single matte skin-tone PBR
+ *     material (no game-gloss). High radial segment counts keep the limb silhouette round (not
+ *     faceted) at the 6–12 inch inspection distance. Pose + dimensions come from `ARM_POSE` in
+ *     config/trainingConfig.ts. The elbow is RUNTIME-BENDABLE (`setElbowFlexion`), starting folded
+ *     at 90°; the cuff site on the upper arm never moves when the elbow bends.
  *
  * CRITICAL — this is FOREGROUND content and IS shown in AR (unlike `environmentRoot`, which is hidden
  * in AR). It is the physical thing the cuff goes on. `setVisible(false)` lets sites that use a real
@@ -19,9 +22,9 @@
  *
  * Allocation discipline: geometry/materials/frames are built ONCE. No per-frame work happens here.
  *
- * Verified APIs (playcanvas@2.19): pc.Entity, createCone(baseRadius/peakRadius/height), createSphere,
- * createBox, MeshInstance, RenderComponent, ContainerResource.instantiateRenderEntity (via
- * AssetRegistry.loadContainer).
+ * Verified APIs (playcanvas@2.19): pc.Entity, createCone(baseRadius/peakRadius/height/capSegments),
+ * createSphere(latitudeBands/longitudeBands), createCapsule(radius/height/sides), MeshInstance,
+ * RenderComponent, ContainerResource.instantiateRenderEntity (via AssetRegistry.loadContainer).
  */
 
 import * as pc from 'playcanvas';
@@ -45,6 +48,15 @@ const ARM_MODEL_URL = 'assets/models/patient_arm.glb';
  * SME-REVIEW (cosmetic): a single neutral mid skin tone; real training may want selectable tones.
  */
 const SKIN_DIFFUSE = new pc.Color(0.76, 0.6, 0.52);
+
+/**
+ * Procedural limb smoothness (cosmetic; BUILD-TIME only — geometry is created once, so higher
+ * counts cost triangles, not frame time). Radial segments wrap the limb circumference; sphere bands
+ * round the shoulder/elbow/wrist joints. Chosen so the skin silhouette reads round, not faceted, at
+ * the 6–12 inch inspection distance.
+ */
+const LIMB_RADIAL_SEGMENTS = 48;
+const JOINT_SPHERE_BANDS = 32;
 
 /**
  * A placement frame: a world-space position + the local arm-axis direction at that point, so the
@@ -89,6 +101,15 @@ export class PatientArm {
   private forearmRadius: number = ARM_POSE.forearm.radiusBottom;
 
   private skinMaterial: pc.StandardMaterial | null = null;
+
+  /**
+   * The elbow pivot the forearm (+ hand) hangs under, kept so the elbow is RUNTIME-BENDABLE via
+   * `setElbowFlexion`. Null until the procedural arm is built, and stays null for a real arm GLB
+   * (which defines its own pose) — bending is then a no-op.
+   */
+  private forearmPivot: pc.Entity | null = null;
+  /** Current elbow flexion (deg); starts at the configured rest pose (90° fold). */
+  private currentElbowFlexionDeg: number = ARM_POSE.elbowFlexionDeg;
 
   constructor(device: pc.GraphicsDevice, assets: AssetRegistry) {
     this.device = device;
@@ -164,33 +185,41 @@ export class PatientArm {
     upperArm.setLocalPosition(0, -ua.length * 0.5, 0);
     this.limbRoot.addChild(upperArm);
 
+    // Shoulder cap: a sphere rounding off the top of the limb (no hard cone rim at the shoulder).
+    const shoulder = this.makeSphere('shoulder', ua.radiusTop * 1.02, mat);
+    this.limbRoot.addChild(shoulder);
+
     // Elbow joint: a sphere at the bottom of the upper arm.
     const elbowY = -ua.length;
     const elbow = this.makeSphere('elbow', ua.radiusBottom * 1.05, mat);
     elbow.setLocalPosition(0, elbowY, 0);
     this.limbRoot.addChild(elbow);
 
-    // Forearm: parented to an elbow pivot so we can flex it forward (−Z) by the configured angle.
+    // Forearm: parented to an elbow pivot so it flexes forward (toward +Z when bent). The pivot is
+    // retained so the elbow stays runtime-bendable (`setElbowFlexion`); the configured rest pose
+    // (90° fold) is applied below through the same path the runtime bend uses.
     const forearmPivot = new pc.Entity('forearm-pivot');
     forearmPivot.setLocalPosition(0, elbowY, 0);
-    forearmPivot.setLocalEulerAngles(-ARM_POSE.elbowFlexionDeg, 0, 0);
     this.limbRoot.addChild(forearmPivot);
+    this.forearmPivot = forearmPivot;
+    this.setElbowFlexion(ARM_POSE.elbowFlexionDeg);
 
     const forearm = this.makeCone('forearm', fa.radiusTop, fa.radiusBottom, fa.length, mat);
     forearm.setLocalEulerAngles(180, 0, 0);
     forearm.setLocalPosition(0, -fa.length * 0.5, 0);
     forearmPivot.addChild(forearm);
 
-    // Hand stand-in: a short rounded block at the wrist.
+    // Wrist joint: a sphere rounding the forearm into the hand.
     const wristY = -fa.length;
-    const hand = this.makeBox(
-      'hand',
-      fa.radiusBottom * 1.7,
-      ARM_POSE.handLength,
-      fa.radiusBottom * 0.9,
-      mat,
-    );
+    const wrist = this.makeSphere('wrist', fa.radiusBottom * 1.02, mat);
+    wrist.setLocalPosition(0, wristY, 0);
+    forearmPivot.addChild(wrist);
+
+    // Hand stand-in: a rounded capsule past the wrist, non-uniformly scaled into a palm (wider
+    // across local X, flattened along local Z). Rounded caps replace the old hard-edged block.
+    const hand = this.makeCapsule('hand', fa.radiusBottom * 0.85, ARM_POSE.handLength, mat);
     hand.setLocalPosition(0, wristY - ARM_POSE.handLength * 0.5, 0);
+    hand.setLocalScale(1.6, 1, 0.7);
     forearmPivot.addChild(hand);
 
     this.placeFramesProcedural(forearmPivot);
@@ -218,6 +247,26 @@ export class PatientArm {
     }
     this.forearmFrameNode.setLocalPosition(0, -fa.length * 0.5, 0);
     this.forearmFrameNode.setLocalEulerAngles(0, 0, 0);
+  }
+
+  /**
+   * Bend the elbow to `deg` of flexion (0 = straight arm, larger = more folded), clamped to
+   * `ARM_POSE.elbowFlexionRangeDeg`. The forearm + hand (and the forearm cuff-site frame) rotate
+   * about the elbow pivot; the upper arm — where the cuff sits — is unaffected, so bending never
+   * moves the cuff. Allocation-free; safe to drive from UI events. No-op for a real arm GLB
+   * (no procedural pivot), though the clamped value is still recorded.
+   */
+  setElbowFlexion(deg: number): void {
+    const range = ARM_POSE.elbowFlexionRangeDeg;
+    const clamped = deg < range.min ? range.min : deg > range.max ? range.max : deg;
+    this.currentElbowFlexionDeg = clamped;
+    if (!this.forearmPivot) return;
+    this.forearmPivot.setLocalEulerAngles(-clamped, 0, 0);
+  }
+
+  /** Current elbow flexion (deg), for UI reflection. */
+  get elbowFlexionDeg(): number {
+    return this.currentElbowFlexionDeg;
   }
 
   /** Show/hide the whole arm (sites with a real manikin/arm hide it). */
@@ -252,27 +301,35 @@ export class PatientArm {
     mat: pc.StandardMaterial,
   ): pc.Entity {
     const e = new pc.Entity(name);
-    const mesh = pc.createCone(this.device, { baseRadius, peakRadius, height, capSegments: 24 });
+    const mesh = pc.createCone(this.device, {
+      baseRadius,
+      peakRadius,
+      height,
+      capSegments: LIMB_RADIAL_SEGMENTS,
+    });
     e.addComponent('render', { meshInstances: [new pc.MeshInstance(mesh, mat)] });
     return e;
   }
 
   private makeSphere(name: string, radius: number, mat: pc.StandardMaterial): pc.Entity {
     const e = new pc.Entity(name);
-    const mesh = pc.createSphere(this.device, { radius });
+    const mesh = pc.createSphere(this.device, {
+      radius,
+      latitudeBands: JOINT_SPHERE_BANDS,
+      longitudeBands: JOINT_SPHERE_BANDS,
+    });
     e.addComponent('render', { meshInstances: [new pc.MeshInstance(mesh, mat)] });
     return e;
   }
 
-  private makeBox(
+  private makeCapsule(
     name: string,
-    x: number,
-    y: number,
-    z: number,
+    radius: number,
+    height: number,
     mat: pc.StandardMaterial,
   ): pc.Entity {
     const e = new pc.Entity(name);
-    const mesh = pc.createBox(this.device, { halfExtents: new pc.Vec3(x * 0.5, y * 0.5, z * 0.5) });
+    const mesh = pc.createCapsule(this.device, { radius, height, sides: LIMB_RADIAL_SEGMENTS });
     e.addComponent('render', { meshInstances: [new pc.MeshInstance(mesh, mat)] });
     return e;
   }

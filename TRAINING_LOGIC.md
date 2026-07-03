@@ -136,11 +136,17 @@ Each item is also flagged `SME-REVIEW:` at its source. None is asserted as clini
    guidance) **and the specific device's IFU**.
 9. **Demonstration pacing** (`DEMO_SEGMENTS` durations) — presentation only.
 10. **Procedural patient-arm anatomy & pose** (`ARM_POSE` in `config/trainingConfig.ts`;
-    `entities/patientArm.ts`). The upper-arm/forearm dimensions and the relaxed **bent-elbow rest
-    pose** are plausible-adult teaching affordances, **not** anthropometrically validated and **not**
-    the asserted clinically-correct measurement posture (arm supported at **heart level, palm up**).
-    Confirm acceptable dimensions, pose, and whether a supported/heart-level posture should be taught
-    or enforced. (The arm is a stand-in until a real arm/manikin GLB is supplied.)
+    `entities/patientArm.ts`). The upper-arm/forearm dimensions and the rest pose are plausible-adult
+    teaching affordances, **not** anthropometrically validated and **not** the asserted
+    clinically-correct measurement posture (arm supported at **heart level, palm up**). The elbow is
+    now **runtime-bendable**: the arm **starts folded at 90°** (`elbowFlexionDeg`, was 18°) with an
+    adjustable flexion range of **0–100°** (`elbowFlexionRangeDeg`, driven by a UI slider /
+    `setElbowFlexion`; the 100° cap is a mesh-clearance constraint — the rigid forearm would clip
+    into the cuff band beyond it — not an anatomical claim). Neither the 90° start, the range, nor bending's effect on posture is a
+    validated anatomical or range-of-motion claim — confirm acceptable dimensions, rest pose, bend
+    range, and whether a supported/heart-level posture should be taught or enforced. (The arm is a
+    stand-in until a real arm/manikin GLB is supplied; bending never moves the cuff site on the
+    upper arm.)
 11. **Cuff-on-arm placement** (`CUFF_ON_ARM` in `config/trainingConfig.ts`). The wrap is centered at
     `alongUpperArm01` of the upper arm with an implied artery-marker orientation. Confirm the correct
     **landmark** (artery marker over the **brachial artery**; lower cuff edge **~2–3 cm above the

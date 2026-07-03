@@ -38,7 +38,18 @@ const WRAP_OFFSET = new pc.Vec3(0.22, 0, 0.02);
  */
 const CUFF_BAND_CLEARANCE = 0.004; // radial gap (m) between limb surface and band inner face
 const CUFF_BAND_ARC_DEG = 300; // arc (deg) the band wraps around the limb
-const CUFF_BAND_STAVES = 9; // flat staves approximating the curve (more = smoother, costlier)
+// Staves approximating the curve. 21 (up from 9) reads as a smooth band at inspection distance while
+// staying a build-time-only cost (a few hundred extra triangles, zero per-frame work).
+const CUFF_BAND_STAVES = 21;
+
+/**
+ * Procedural aneroid gauge tunables (cosmetic; the full-procedural fallback only — the real device
+ * GLB supplies the gauge in composite mode). The slab is 3× the original 0.018 m wafer so the gauge
+ * head reads as a solid device body, not a thin disc, when seen edge-on up close. Radial segments
+ * smooth the disc/bezel rims; geometry is built once (no per-frame cost).
+ */
+const GAUGE_SLAB_THICKNESS = 0.054;
+const GAUGE_RADIAL_SEGMENTS = 48;
 
 export class BloodPressureCuff {
   /** Root entity; parent this under the world/anchor root. */
@@ -398,31 +409,49 @@ export class BloodPressureCuff {
     gauge.setLocalEulerAngles(-25, 0, 0);
     this.root.addChild(gauge);
 
-    const gaugeBody = this.makeMeshEntity('gauge-body', this.cylinderMesh(0.03, 0.018), 'gaugeBody');
+    // Bezel/face/needle/lens stack off the slab's top half, preserving the original layering gaps.
+    const slabHalf = GAUGE_SLAB_THICKNESS * 0.5;
+    const gaugeBody = this.makeMeshEntity(
+      'gauge-body',
+      this.cylinderMesh(0.03, GAUGE_SLAB_THICKNESS, GAUGE_RADIAL_SEGMENTS),
+      'gaugeBody',
+    );
     gaugeBody.setLocalEulerAngles(90, 0, 0);
     gauge.addChild(gaugeBody);
 
-    const bezel = this.makeMeshEntity('gauge-bezel', this.torusMesh(0.004, 0.03, 360), 'metalTrim');
-    bezel.setLocalPosition(0, 0.009, 0);
+    const bezel = this.makeMeshEntity(
+      'gauge-bezel',
+      this.torusMesh(0.004, 0.03, 360, GAUGE_RADIAL_SEGMENTS),
+      'metalTrim',
+    );
+    bezel.setLocalPosition(0, slabHalf, 0);
     bezel.setLocalEulerAngles(90, 0, 0);
     gauge.addChild(bezel);
 
-    const face = this.makeMeshEntity('gauge-face', this.cylinderMesh(0.028, 0.001), 'gaugeFace');
-    face.setLocalPosition(0, 0.0095, 0);
+    const face = this.makeMeshEntity(
+      'gauge-face',
+      this.cylinderMesh(0.028, 0.001, GAUGE_RADIAL_SEGMENTS),
+      'gaugeFace',
+    );
+    face.setLocalPosition(0, slabHalf + 0.0005, 0);
     face.setLocalEulerAngles(90, 0, 0);
     gauge.addChild(face);
 
     // Needle: thin box pivoting at the gauge center. Parent node is what the gauge controller spins.
     const needlePivot = new pc.Entity('needle');
-    needlePivot.setLocalPosition(0, 0.011, 0);
+    needlePivot.setLocalPosition(0, slabHalf + 0.002, 0);
     gauge.addChild(needlePivot);
     const needleMesh = this.makeMeshEntity('needle-mesh', this.boxMesh(0.0015, 0.0008, 0.022), 'needle');
     needleMesh.setLocalPosition(0, 0, 0.009);
     needlePivot.addChild(needleMesh);
     this.needle = needlePivot;
 
-    const lens = this.makeMeshEntity('gauge-lens', this.cylinderMesh(0.028, 0.0008), 'lens');
-    lens.setLocalPosition(0, 0.012, 0);
+    const lens = this.makeMeshEntity(
+      'gauge-lens',
+      this.cylinderMesh(0.028, 0.0008, GAUGE_RADIAL_SEGMENTS),
+      'lens',
+    );
+    lens.setLocalPosition(0, slabHalf + 0.003, 0);
     lens.setLocalEulerAngles(90, 0, 0);
     gauge.addChild(lens);
   }
@@ -542,12 +571,17 @@ export class BloodPressureCuff {
     return pc.createBox(this.device, { halfExtents: new pc.Vec3(x * 0.5, y * 0.5, z * 0.5) });
   }
 
-  private cylinderMesh(radius: number, height: number): pc.Mesh {
-    return pc.createCylinder(this.device, { radius, height });
+  private cylinderMesh(radius: number, height: number, capSegments = 20): pc.Mesh {
+    return pc.createCylinder(this.device, { radius, height, capSegments });
   }
 
-  private torusMesh(tubeRadius: number, ringRadius: number, sectorAngle: number): pc.Mesh {
-    return pc.createTorus(this.device, { tubeRadius, ringRadius, sectorAngle });
+  private torusMesh(
+    tubeRadius: number,
+    ringRadius: number,
+    sectorAngle: number,
+    segments = 30,
+  ): pc.Mesh {
+    return pc.createTorus(this.device, { tubeRadius, ringRadius, sectorAngle, segments });
   }
 
   private sphereMesh(radius: number): pc.Mesh {

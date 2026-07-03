@@ -413,3 +413,28 @@ Runtime (requires WebXR device/browser — **cannot be verified in this environm
   omnidirectionally and let the extra fills be retired. **Caveat:** the headless SwiftShader render is
   only a proxy; on-device GPU PBR + WebXR **light estimation** (which overrides the key/ambient in AR)
   is the real appearance and remains an on-device check.
+- **A25.** **Scene polish: floor clamp + rounded/high-poly procedural geometry.** (1) Placement now
+  **clamps the placed content above the floor plane** (`FLOOR_PLANE_Y = 0`, clearance 0.01 m, in
+  `interaction/placementController.ts`): the patient arm hangs ~0.45 m below the cuff origin and was
+  poking through the preview floor stand-in. y=0 is assumed to be the floor in BOTH the non-AR preview
+  (environmentRoot's plane) and a `local-floor` AR reference space; the clamp only ever LIFTS (a
+  hit-test placement on an elevated surface is left where it landed) and runs at placement time only
+  (plus one re-clamp after the arm is mounted) — never per frame. (2) The procedural arm is **rounded
+  and higher-poly** (48 radial segments, 32-band joint spheres, shoulder/wrist caps, capsule hand
+  replacing the block), the cuff band uses **21 staves** (was 9), and the fallback aneroid **gauge slab
+  is 3× thicker** (0.054 m, was 0.018) with 48-segment discs/bezel — all BUILD-TIME geometry cost only
+  (a few thousand extra triangles, zero per-frame allocations); the real device GLB path is unchanged.
+  Cosmetic/spatial only — no clinical value, threshold, or step order touched.
+- **A26.** **Bendable elbow, starting folded at 90°.** The procedural arm's elbow pivot is retained
+  after build so `PatientArm.setElbowFlexion(deg)` can bend the forearm+hand at runtime (clamped to
+  `ARM_POSE.elbowFlexionRangeDeg`, 0–100° — the max is a mesh-clearance cap: the cuff band's lower
+  edge is ~5 cm above the elbow and the rigid forearm visibly clips into it past ~100°, verified in
+  the headless smoke render), driven by an "Elbow" slider in the Controls panel via
+  `TrainingScene.setElbowFlexion`. The default rest pose changed 18° → **90°** (forearm horizontal,
+  reading as resting on a surface) — an `SME-REVIEW`-flagged ARM_POSE data change logged in
+  TRAINING_LOGIC.md §7 item 10, NOT a validated posture claim. Bending rotates only the elbow pivot
+  (allocation-free; UI-event rate); the cuff site on the upper arm never moves, so the wrapped cuff
+  and its captured target pose are unaffected. Each bend re-runs the placement floor clamp (A25) —
+  the clamp only lifts, so straightening the arm can raise the scene but bending it back never
+  lowers it (conservative; re-place to settle). A real arm GLB has no procedural pivot: bending is a
+  recorded no-op there until a rigged arm supplies its own elbow.

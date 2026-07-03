@@ -9,7 +9,8 @@
  *     tapered cones, joint spheres and a rounded hand capsule with a single matte skin-tone PBR
  *     material (no game-gloss). High radial segment counts keep the limb silhouette round (not
  *     faceted) at the 6–12 inch inspection distance. Pose + dimensions come from `ARM_POSE` in
- *     config/trainingConfig.ts.
+ *     config/trainingConfig.ts. The elbow is RUNTIME-BENDABLE (`setElbowFlexion`), starting folded
+ *     at 90°; the cuff site on the upper arm never moves when the elbow bends.
  *
  * CRITICAL — this is FOREGROUND content and IS shown in AR (unlike `environmentRoot`, which is hidden
  * in AR). It is the physical thing the cuff goes on. `setVisible(false)` lets sites that use a real
@@ -101,6 +102,15 @@ export class PatientArm {
 
   private skinMaterial: pc.StandardMaterial | null = null;
 
+  /**
+   * The elbow pivot the forearm (+ hand) hangs under, kept so the elbow is RUNTIME-BENDABLE via
+   * `setElbowFlexion`. Null until the procedural arm is built, and stays null for a real arm GLB
+   * (which defines its own pose) — bending is then a no-op.
+   */
+  private forearmPivot: pc.Entity | null = null;
+  /** Current elbow flexion (deg); starts at the configured rest pose (90° fold). */
+  private currentElbowFlexionDeg: number = ARM_POSE.elbowFlexionDeg;
+
   constructor(device: pc.GraphicsDevice, assets: AssetRegistry) {
     this.device = device;
     this.assets = assets;
@@ -185,11 +195,14 @@ export class PatientArm {
     elbow.setLocalPosition(0, elbowY, 0);
     this.limbRoot.addChild(elbow);
 
-    // Forearm: parented to an elbow pivot so we can flex it forward (−Z) by the configured angle.
+    // Forearm: parented to an elbow pivot so it flexes forward (toward +Z when bent). The pivot is
+    // retained so the elbow stays runtime-bendable (`setElbowFlexion`); the configured rest pose
+    // (90° fold) is applied below through the same path the runtime bend uses.
     const forearmPivot = new pc.Entity('forearm-pivot');
     forearmPivot.setLocalPosition(0, elbowY, 0);
-    forearmPivot.setLocalEulerAngles(-ARM_POSE.elbowFlexionDeg, 0, 0);
     this.limbRoot.addChild(forearmPivot);
+    this.forearmPivot = forearmPivot;
+    this.setElbowFlexion(ARM_POSE.elbowFlexionDeg);
 
     const forearm = this.makeCone('forearm', fa.radiusTop, fa.radiusBottom, fa.length, mat);
     forearm.setLocalEulerAngles(180, 0, 0);
@@ -234,6 +247,26 @@ export class PatientArm {
     }
     this.forearmFrameNode.setLocalPosition(0, -fa.length * 0.5, 0);
     this.forearmFrameNode.setLocalEulerAngles(0, 0, 0);
+  }
+
+  /**
+   * Bend the elbow to `deg` of flexion (0 = straight arm, larger = more folded), clamped to
+   * `ARM_POSE.elbowFlexionRangeDeg`. The forearm + hand (and the forearm cuff-site frame) rotate
+   * about the elbow pivot; the upper arm — where the cuff sits — is unaffected, so bending never
+   * moves the cuff. Allocation-free; safe to drive from UI events. No-op for a real arm GLB
+   * (no procedural pivot), though the clamped value is still recorded.
+   */
+  setElbowFlexion(deg: number): void {
+    const range = ARM_POSE.elbowFlexionRangeDeg;
+    const clamped = deg < range.min ? range.min : deg > range.max ? range.max : deg;
+    this.currentElbowFlexionDeg = clamped;
+    if (!this.forearmPivot) return;
+    this.forearmPivot.setLocalEulerAngles(-clamped, 0, 0);
+  }
+
+  /** Current elbow flexion (deg), for UI reflection. */
+  get elbowFlexionDeg(): number {
+    return this.currentElbowFlexionDeg;
   }
 
   /** Show/hide the whole arm (sites with a real manikin/arm hide it). */

@@ -135,6 +135,17 @@ export class TrainingScene {
     this.patientArm.setVisible(visible);
   }
 
+  /**
+   * Bend the patient arm's elbow (deg of flexion; clamped by the arm). The forearm swings about the
+   * elbow, changing the content's lower extent, so the placement floor clamp is re-run — the clamp
+   * only ever lifts, so straightening the arm raises the scene if the hand would dip below the
+   * floor. UI-event rate (never per frame): the re-clamp walks the render hierarchy.
+   */
+  setElbowFlexion(deg: number): void {
+    this.patientArm.setElbowFlexion(deg);
+    this.cuffScene.reclampPlacement();
+  }
+
   /** True if a real environment GLB loaded (vs procedural stand-in) — for status/README. */
   get environmentIsReal(): boolean {
     return this.environment.isRealModel;

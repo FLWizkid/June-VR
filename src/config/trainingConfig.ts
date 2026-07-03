@@ -100,11 +100,13 @@ export const TRAINING_TOLERANCES = {
  * Procedural patient-arm anatomy + pose (meters / degrees). Drives the stand-in forearm + upper-arm
  * the trainee wraps the cuff onto when no real arm/manikin GLB is supplied (entities/patientArm.ts).
  *
- * SME-REVIEW: these are *plausible adult* dimensions and a relaxed seated/extended pose chosen as a
- * teaching affordance so the cuff reads as "a cuff on an arm" — they are NOT anthropometrically
- * validated and the pose is not asserted as the clinically-correct measurement posture (arm
- * supported at heart level, palm up). Confirm dimensions/pose with an educator before instructional
- * use. See TRAINING_LOGIC.md §7. Distances in meters, angles in degrees.
+ * SME-REVIEW: these are *plausible adult* dimensions and a teaching-affordance pose so the cuff
+ * reads as "a cuff on an arm" — they are NOT anthropometrically validated and the pose is not
+ * asserted as the clinically-correct measurement posture (arm supported at heart level, palm up).
+ * The starting pose folds the elbow at 90° (forearm horizontal, as if resting on a surface) and the
+ * elbow is runtime-bendable within `elbowFlexionRangeDeg`; neither the default nor the range is a
+ * validated anatomical/postural claim. Confirm dimensions/pose with an educator before
+ * instructional use. See TRAINING_LOGIC.md §7. Distances in meters, angles in degrees.
  */
 export const ARM_POSE = {
   /** Upper-arm (shoulder→elbow) segment. radiusTop near shoulder, radiusBottom near elbow. */
@@ -120,8 +122,20 @@ export const ARM_POSE = {
   rootPosition: { x: 0.0, y: 0.0, z: 0.0 },
   /** Euler (deg) applied to the arm root so the limb lies in a comfortable extended rest. */
   rootEulerDeg: { x: 0, y: 0, z: 0 },
-  /** Elbow flexion (deg) between upper-arm and forearm (0 = straight). */
-  elbowFlexionDeg: 18,
+  /**
+   * Elbow flexion (deg) between upper-arm and forearm (0 = straight). Starting/rest state: the arm
+   * begins FOLDED AT 90° at the elbow (forearm horizontal). SME-REVIEW: teaching affordance, not a
+   * validated measurement posture.
+   */
+  elbowFlexionDeg: 90,
+  /**
+   * Runtime bend limits (deg) for the adjustable elbow (entities/patientArm.ts `setElbowFlexion`).
+   * The max is capped at 100° by GEOMETRY, not anatomy: the cuff band's lower edge sits ~5 cm above
+   * the elbow, and folding past ~100° drives the (rigid) forearm mesh into it — verified against the
+   * headless smoke render. SME-REVIEW: an interaction affordance, not a validated
+   * range-of-motion claim.
+   */
+  elbowFlexionRangeDeg: { min: 0, max: 100 },
 } as const;
 
 /**

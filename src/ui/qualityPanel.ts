@@ -7,17 +7,21 @@ import { getOverlayRoot, styleAsPanel } from './overlay';
 import { QualityTier, QUALITY_ORDER, getProfile } from '../config/qualityProfiles';
 import { CuffSize, getVariant } from '../entities/cuffVariants';
 import { ARM_POSE } from '../config/trainingConfig';
+import { ValveState } from '../interaction/inflationController';
 
 export class QualityPanel {
   private readonly el: HTMLElement;
   private readonly tierRow: HTMLElement;
   private readonly sizeLabel: HTMLElement;
   private readonly elbowLabel: HTMLElement;
+  private readonly valveChip: HTMLElement;
 
   private onTier: ((tier: QualityTier) => void) | null = null;
   private onSize: ((size: CuffSize) => void) | null = null;
   private onInflate: (() => void) | null = null;
   private onElbow: ((deg: number) => void) | null = null;
+  private onPump: (() => void) | null = null;
+  private onValve: (() => void) | null = null;
 
   constructor() {
     this.el = document.createElement('div');
@@ -51,6 +55,15 @@ export class QualityPanel {
     sizeRow.appendChild(this.sizeLabel);
 
     const inflateBtn = this.makeChip('Inflate cycle', () => this.onInflate?.());
+
+    // Manual pump + release valve (mirrors clicking the bulb / gauge screen in the 3D scene).
+    const pumpRow = document.createElement('div');
+    pumpRow.style.display = 'flex';
+    pumpRow.style.gap = '6px';
+    const pumpBtn = this.makeChip('Pump bulb', () => this.onPump?.());
+    this.valveChip = this.makeChip('Valve: Closed', () => this.onValve?.());
+    pumpRow.appendChild(pumpBtn);
+    pumpRow.appendChild(this.valveChip);
 
     // Elbow bend: live slider over the configured flexion range, starting at the 90° rest fold.
     const elbowRow = document.createElement('div');
@@ -86,6 +99,7 @@ export class QualityPanel {
     this.el.appendChild(this.tierRow);
     this.el.appendChild(sizeRow);
     this.el.appendChild(inflateBtn);
+    this.el.appendChild(pumpRow);
     this.el.appendChild(elbowRow);
     getOverlayRoot().appendChild(this.el);
   }
@@ -97,11 +111,26 @@ export class QualityPanel {
     onSize: (size: CuffSize) => void;
     onInflate: () => void;
     onElbow: (deg: number) => void;
+    onPump: () => void;
+    onValve: () => void;
   }): void {
     this.onTier = handlers.onTier;
     this.onSize = handlers.onSize;
     this.onInflate = handlers.onInflate;
     this.onElbow = handlers.onElbow;
+    this.onPump = handlers.onPump;
+    this.onValve = handlers.onValve;
+  }
+
+  /** Reflect the release-valve state (changed by UI or by pressing the gauge/bulb in 3D). */
+  setValveState(state: ValveState): void {
+    const label =
+      state === ValveState.Closed
+        ? 'Valve: Closed'
+        : state === ValveState.Controlled
+          ? 'Valve: Releasing'
+          : 'Valve: Open';
+    this.valveChip.textContent = label;
   }
 
   /** Reflect the externally-active tier (e.g. after adaptive change). */

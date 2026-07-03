@@ -281,7 +281,15 @@ export class ARCuffApplication {
       onElbow: (deg) => {
         this.trainingScene?.setElbowFlexion(deg);
       },
+      onPump: () => {
+        this.cuffScene?.pumpBulb();
+      },
+      onValve: () => {
+        this.cuffScene?.cycleValve();
+      },
     });
+    // Valve state can change from ANY path (3D bulb/screen presses, UI, pumping) — mirror it in UI.
+    this.cuffScene?.setOnValveChange((state) => this.qualityPanel.setValveState(state));
 
     // Training panel: mode/next/restart wired to the training layer; status pushed from the machine.
     this.trainingPanel.setHandlers({
@@ -298,21 +306,35 @@ export class ARCuffApplication {
   private wireDesktopInspectInput(): void {
     if (typeof window === 'undefined') return;
     let dragging = false;
+    let partDragging = false;
     let lastX = 0;
     let lastY = 0;
     const canvas = this.app.graphicsDevice.canvas as HTMLCanvasElement;
 
     canvas.addEventListener('pointerdown', (e: PointerEvent) => {
       if (this.xr.active) return;
+      // Part interactions first (arm/band/device drags, bulb pump, valve press); when the pointer
+      // lands on a part, camera orbit stands down for this drag. Empty space still orbits.
+      partDragging = this.cuffScene?.pointerDown(e.clientX, e.clientY) ?? false;
+      if (partDragging) return;
       dragging = true;
       lastX = e.clientX;
       lastY = e.clientY;
     });
     window.addEventListener('pointerup', () => {
+      if (partDragging) {
+        this.cuffScene?.pointerUp();
+        partDragging = false;
+      }
       dragging = false;
     });
     window.addEventListener('pointermove', (e: PointerEvent) => {
-      if (!dragging || this.xr.active || !this.cuffScene) return;
+      if (this.xr.active || !this.cuffScene) return;
+      if (partDragging) {
+        this.cuffScene.pointerMove(e.clientX, e.clientY);
+        return;
+      }
+      if (!dragging) return;
       const dx = (e.clientX - lastX) * 0.3;
       const dy = (e.clientY - lastY) * 0.3;
       lastX = e.clientX;

@@ -80,6 +80,24 @@ export const TRAINING_CLINICAL = {
 } as const;
 
 /**
+ * Manual pump / valve / pulse interaction tuning (the hands-on inflate path — the trainee squeezes
+ * the bulb and works the valve instead of watching the scripted demo cycle).
+ *
+ * SME-REVIEW: every field is a procedure/physiology claim used for plausible simulator feedback:
+ *   - `squeezeMmHg`: pressure added per full bulb squeeze — plausible, not measured from a device.
+ *   - `dumpDeflateMmHgPerSec`: full-open valve dump rate — interaction affordance. The CONTROLLED
+ *     release rate is NOT duplicated here; it reuses `TRAINING_CLINICAL.controlledDeflateMmHgPerSec`.
+ *   - `pulse`: simulated heartbeat shown as a gauge-needle bounce while the falling cuff pressure is
+ *     between the demo systolic and diastolic markers (oscillometric teaching cue). Rate/amplitude
+ *     are illustrative; the appearance/disappearance window is a teaching claim to confirm.
+ */
+export const PUMP_INTERACTION = {
+  squeezeMmHg: 15,
+  dumpDeflateMmHgPerSec: 40,
+  pulse: { rateBpm: 72, needleAmplitudeMmHg: 3 },
+} as const;
+
+/**
  * Fit / placement tolerances used by the (illustrative) validation rules. Distances in meters.
  *
  * SME-REVIEW: these tolerances are simulator affordances chosen for legible interaction on XR

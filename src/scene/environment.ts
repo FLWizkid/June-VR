@@ -7,10 +7,16 @@
  *
  * Seam (drop either file into `public/assets/env/`):
  *   - `env_atlas.ktx2` — a PREFILTERED environment-lighting atlas (the format PlayCanvas'
- *     `scene.envAtlas` expects). Assigned directly for reflections + ambient.
+ *     `scene.envAtlas` expects). Assigned directly for reflections + ambient. Requires the Basis
+ *     transcoder to be initialized (see core/assetRegistry.ts `basisReady`), else it is skipped.
  *   - `env.hdr` — a raw EQUIRECT HDR. Converted at load via `EnvLighting.generateLightingSource` +
  *     `generateAtlas` into a prefiltered atlas, then assigned. (The .ktx2 path is preferred — it
  *     skips the runtime prefilter cost.)
+ *
+ * ROBUSTNESS (runtime-verified): optional IBL must NEVER block startup. We (a) skip KTX2 when the
+ * transcoder isn't initialized (that load would hang), and (b) probe each file with a HEAD request
+ * first, so a missing file — or a dev SPA server's 200-HTML fallback — is never handed to the binary
+ * texture parser and never wedges `start()`.
  *
  * OPTICAL SEE-THROUGH RULE (CLAUDE.md / SPEC §4): in AR we must NOT render a skybox/background. We
  * keep only REFLECTIONS (envAtlas) and never set `scene.skybox`; additionally `skyboxIntensity` is
@@ -49,33 +55,40 @@ export class Environment {
 
   /**
    * Attempt to load an optional IBL source. Order: prefiltered `env_atlas.ktx2` (used directly), then
-   * raw `env.hdr` (prefiltered at runtime). Never required and never throws — any failure leaves the
-   * constant-ambient fallback in place.
-   * TODO(real-assets): drop `assets/env/env_atlas.ktx2` (preferred) or `assets/env/env.hdr` to enable.
+   * raw `env.hdr` (prefiltered at runtime). Never required and never throws — any failure (or missing
+   * file, or uninitialized Basis transcoder) leaves the constant-ambient fallback in place and returns
+   * promptly so startup is never blocked.
+   * TODO(real-assets): drop `assets/env/env_atlas.ktx2` (preferred, + init Basis) or `assets/env/env.hdr`.
    */
   async load(): Promise<void> {
-    // 1) Preferred: a ready prefiltered atlas.
-    const atlas = await this.assets.loadTexture(ENV_ATLAS_URL, false);
-    if (atlas) {
-      this.envAtlas = atlas;
-      log.info('IBL: env atlas (.ktx2) loaded');
-      return;
+    // 1) Preferred: a ready prefiltered atlas. KTX2 needs the Basis transcoder AND the file must
+    //    actually exist — a dev SPA server returns 200 HTML for missing files; never feed that to the
+    //    texture parser and never block startup on an optional asset.
+    if (this.assets.canDecodeBasis && (await assetPresent(ENV_ATLAS_URL))) {
+      const atlas = await this.assets.loadTexture(ENV_ATLAS_URL, false);
+      if (atlas) {
+        this.envAtlas = atlas;
+        log.info('IBL: env atlas (.ktx2) loaded');
+        return;
+      }
     }
 
     // 2) Fallback: a raw equirect HDR, prefiltered at runtime (capability-guarded).
-    const hdr = await this.assets.loadTexture(ENV_HDR_URL, false);
-    if (hdr) {
-      const derived = this.prefilterEquirect(hdr);
-      if (derived) {
-        this.envAtlas = derived;
-        log.info('IBL: env atlas derived from equirect HDR');
+    if (await assetPresent(ENV_HDR_URL)) {
+      const hdr = await this.assets.loadTexture(ENV_HDR_URL, false);
+      if (hdr) {
+        const derived = this.prefilterEquirect(hdr);
+        if (derived) {
+          this.envAtlas = derived;
+          log.info('IBL: env atlas derived from equirect HDR');
+          return;
+        }
+        log.warn('IBL: HDR present but prefilter failed; using constant ambient');
         return;
       }
-      log.warn('IBL: HDR present but prefilter failed; using constant ambient');
-      return;
     }
 
-    log.debug('IBL: no env atlas/HDR; using constant ambient');
+    log.debug('IBL: no env atlas/HDR (or Basis not initialized); using constant ambient');
   }
 
   /**
@@ -114,5 +127,21 @@ export class Environment {
     const scene = this.app.scene;
     if (!scene) return;
     scene.skyboxIntensity = arActive ? 0 : 1.0;
+  }
+}
+
+/**
+ * Lightweight existence probe for an OPTIONAL asset, so a missing file never blocks startup and a dev
+ * SPA server's 200-HTML fallback is never handed to a binary texture parser. Resolves false on any
+ * error (offline, blocked, etc.) — the caller then uses the constant-ambient fallback.
+ */
+async function assetPresent(url: string): Promise<boolean> {
+  try {
+    const res = await fetch(url, { method: 'HEAD' });
+    if (!res.ok) return false;
+    const ct = res.headers.get('content-type') ?? '';
+    return !ct.includes('text/html');
+  } catch {
+    return false;
   }
 }

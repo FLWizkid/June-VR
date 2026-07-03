@@ -24,6 +24,9 @@ You manage everything from your PC with one dev command.
    user gesture to start XR).
 4. The cube gives **visible feedback** when selected: it turns from red to green and the in-world sign
    updates. This works with a **mouse** on desktop and with a **trigger/pinch** in the headset.
+5. The status panel (and the in-world sign) show a live **input readout** — how many hands or
+   controllers are tracked. The session requests **hand tracking** automatically (hand-first), and
+   falls back to controllers/pointer, and to a plain `local` space if `local-floor` is unavailable.
 
 ## The stack
 

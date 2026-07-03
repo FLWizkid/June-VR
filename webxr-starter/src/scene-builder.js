@@ -6,7 +6,7 @@
  * VR session the DOM overlay is NOT visible — only the 3D scene is — so readable text must live in 3D.
  *
  * The returned object exposes the pieces `main.js` needs to wire interaction:
- *   { camera, cube, toggleCube(), setSign(title, subtitle) }
+ *   { camera, cube, toggleCube(), setSign(partial) }   // partial = { title?, subtitle?, status? }
  *
  * This module is engine-only: it does not touch the DOM overlay. Interaction/logging is wired in
  * main.js so responsibilities stay separate (and so healthcare props/hotspots can be added here later
@@ -75,7 +75,7 @@ export function buildScene(app) {
   sign.entity.setLocalEulerAngles(90, 0, 0); // stand the plane upright, facing the viewer (+Z)
   sign.entity.setLocalScale(1.7, 1, 0.75);
   app.root.addChild(sign.entity);
-  sign.setText('PlayCanvas WebXR', 'Select the cube');
+  sign.set({ title: 'PlayCanvas WebXR', subtitle: 'Select the cube', status: '' });
 
   // --- Interaction state -------------------------------------------------------------------------
   let selected = false;
@@ -85,13 +85,13 @@ export function buildScene(app) {
     selected = !selected;
     cubeMat.diffuse.copy(selected ? CUBE_GREEN : CUBE_RED);
     cubeMat.update();
-    sign.setText('PlayCanvas WebXR', selected ? 'SELECTED' : 'Select the cube');
+    sign.set({ subtitle: selected ? 'SELECTED' : 'Select the cube' });
     return selected;
   }
 
-  /** Update the in-world sign text (title + subtitle). */
-  function setSign(title, subtitle) {
-    sign.setText(title, subtitle);
+  /** Update the in-world sign. Accepts any of `{ title, subtitle, status }`; unspecified fields keep. */
+  function setSign(partial) {
+    sign.set(partial);
   }
 
   return { camera, cube, toggleCube, setSign };
@@ -112,7 +112,7 @@ function matte(color, gloss = 0.2) {
  * Build a floating sign: a plane whose texture is a 2D canvas we draw text into. The material is
  * emissive (self-lit) so the text stays readable regardless of scene lighting or headset display.
  *
- * Returns { entity, setText(title, subtitle) }.
+ * Returns { entity, set(partial) } where partial = { title?, subtitle?, status? }.
  */
 function createSign(device) {
   const W = 512;
@@ -142,7 +142,10 @@ function createSign(device) {
   entity.addComponent('render', { type: 'plane' });
   entity.render.material = material;
 
-  function setText(title, subtitle) {
+  // Current sign contents; `set(partial)` merges and redraws so callers can update one field.
+  const state = { title: '', subtitle: '', status: '' };
+
+  function draw() {
     // Rounded panel background.
     ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = '#0f1420';
@@ -153,20 +156,31 @@ function createSign(device) {
     roundRect(ctx, 10, 10, W - 20, H - 20, 26);
     ctx.stroke();
 
-    // Text.
+    // Text lines: title, subtitle, and an optional small status line (e.g. the XR input state).
     ctx.textAlign = 'center';
     ctx.fillStyle = '#eaf1f7';
-    ctx.font = '700 46px system-ui, sans-serif';
-    ctx.fillText(title, W / 2, 108);
+    ctx.font = '700 44px system-ui, sans-serif';
+    ctx.fillText(state.title, W / 2, 92);
     ctx.fillStyle = '#8fd3ff';
-    ctx.font = '600 40px system-ui, sans-serif';
-    ctx.fillText(subtitle, W / 2, 178);
+    ctx.font = '600 38px system-ui, sans-serif';
+    ctx.fillText(state.subtitle, W / 2, 150);
+    if (state.status) {
+      ctx.fillStyle = '#93a3b3';
+      ctx.font = '500 26px system-ui, sans-serif';
+      ctx.fillText(state.status, W / 2, 202);
+    }
 
     // Push the new canvas pixels to the GPU texture.
     texture.setSource(canvas);
   }
 
-  return { entity, setText };
+  /** Merge the given fields into the sign and redraw. Unspecified fields are kept. */
+  function set(partial) {
+    Object.assign(state, partial);
+    draw();
+  }
+
+  return { entity, set };
 }
 
 /** Canvas helper: trace a rounded rectangle path (caller fills/strokes). */

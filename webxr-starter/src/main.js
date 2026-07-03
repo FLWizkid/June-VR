@@ -33,6 +33,7 @@ const scene = buildScene(app);
 
 // 3) Overlay ----------------------------------------------------------------------------------------
 const overlay = createOverlay();
+overlay.setInput('Input: enter VR to detect hands / controllers');
 overlay.log('App started. Rendering the room…');
 
 // 4) XR ---------------------------------------------------------------------------------------------
@@ -84,7 +85,9 @@ if (app.touch) {
 // XR: trigger pull / hand pinch. Ray-test from the input source when it exposes a pointer ray;
 // otherwise just toggle so there is always visible feedback in-headset.
 if (app.xr) {
-  app.xr.input.on(pc.EVENT_SELECTSTART, (inputSource) => {
+  const input = app.xr.input;
+
+  input.on(pc.EVENT_SELECTSTART, (inputSource) => {
     const origin = typeof inputSource.getOrigin === 'function' ? inputSource.getOrigin() : null;
     const direction = typeof inputSource.getDirection === 'function' ? inputSource.getDirection() : null;
     if (origin && direction) {
@@ -95,6 +98,25 @@ if (app.xr) {
       overlay.log(`Select: cube ${selected ? 'SELECTED' : 'released'}`);
     }
   });
+
+  // Simple input-state message: how many hands / controllers are tracked. Shown in the DOM panel
+  // AND on the in-world sign (so it is readable inside the headset, where the DOM is not visible).
+  const reportInput = () => {
+    const sources = input.inputSources || [];
+    const hands = sources.filter((s) => s.hand).length;
+    let desc;
+    if (sources.length === 0) desc = 'none';
+    else if (hands > 0) desc = `${hands} hand${hands > 1 ? 's' : ''} tracked`;
+    else desc = `${sources.length} controller${sources.length > 1 ? 's' : ''}`;
+    overlay.setInput('Input: ' + desc);
+    scene.setSign({ status: sources.length ? desc : '' });
+  };
+  input.on('add', reportInput);
+  input.on('remove', reportInput);
+
+  // Guide the user in-headset via the sign as the session opens/closes.
+  app.xr.on('start', () => scene.setSign({ subtitle: 'Pinch or pull the trigger to select' }));
+  app.xr.on('end', () => scene.setSign({ subtitle: 'Select the cube', status: '' }));
 }
 
 // Keyboard nicety: Esc exits VR.

@@ -67,6 +67,9 @@ Find your symptom. Each item has **what you see**, **why**, and **fix**.
 - **In the headset:** pull the **trigger** or **pinch** with a tracked hand. The log shows each select.
   If selection toggles even when not aimed at the cube, that is the intentional fallback when the
   input source exposes no pointer ray — extend `app.xr.input` handling in `src/main.js` to require a ray.
+- **Check the `Input:` line** in the status panel (and the small line on the in-world sign). It reports
+  how many hands/controllers are tracked. `none` while in VR means the device has not reported input
+  sources yet — move your hands into the headset's view, or wake the controllers, and it updates live.
 
 ## Sign text looks flipped or unreadable
 

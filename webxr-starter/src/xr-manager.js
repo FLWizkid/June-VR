@@ -68,18 +68,33 @@ export class XrManager {
 
   /**
    * Start the immersive session. MUST be called from a user gesture (button click).
+   * Requests hand tracking (hand-first) as an OPTIONAL feature, and falls back once to a plain
+   * `local` reference space if the device does not support `local-floor`.
    */
   enter() {
     const xr = this.app.xr;
     if (!xr || xr.active) return;
 
     this.overlay.log('Requesting immersive VR session…');
-    xr.start(this.cameraEntity.camera, this.sessionType, this.spaceType, {
+    this._start(this.spaceType, true);
+  }
+
+  /** @private Start with `spaceType`; if it fails and `allowFallback`, retry once with `local`. */
+  _start(spaceType, allowFallback) {
+    this.app.xr.start(this.cameraEntity.camera, this.sessionType, spaceType, {
+      // Hand-first: ask for hand tracking when the device offers it. Optional features never block
+      // the session — if the device has no hand tracking, VR still opens (controllers/pointer).
+      optionalFeatures: ['hand-tracking'],
       callback: (err) => {
-        if (err) {
-          this.overlay.setSupport('WebXR: session failed to start');
-          this.overlay.log('Could not start VR: ' + err.message);
+        if (!err) return;
+        if (allowFallback && spaceType === pc.XRSPACE_LOCALFLOOR) {
+          // Some headsets lack a floor-relative space; retry once with `local` so VR still opens.
+          this.overlay.log('local-floor unavailable; retrying with local space…');
+          this._start(pc.XRSPACE_LOCAL, false);
+          return;
         }
+        this.overlay.setSupport('WebXR: session failed to start');
+        this.overlay.log('Could not start VR: ' + err.message);
       },
     });
   }

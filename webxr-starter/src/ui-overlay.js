@@ -21,6 +21,7 @@ export function createOverlay() {
       <div id="title">PlayCanvas WebXR Starter</div>
       <div id="support" class="status">Checking WebXR…</div>
       <div id="session" class="status">Session: inactive</div>
+      <div id="input" class="status">Input: —</div>
       <button id="xr-button" disabled>Checking…</button>
       <div id="hint">
         Desktop: click the cube to select it.<br />
@@ -32,6 +33,7 @@ export function createOverlay() {
 
   const supportEl = root.querySelector('#support');
   const sessionEl = root.querySelector('#session');
+  const inputEl = root.querySelector('#input');
   const buttonEl = root.querySelector('#xr-button');
   const logEl = root.querySelector('#log');
 
@@ -63,6 +65,11 @@ export function createOverlay() {
     root.classList.toggle('xr-active', active);
   }
 
+  /** Reflect the current XR input state (hands / controllers / none). */
+  function setInput(text) {
+    inputEl.textContent = text;
+  }
+
   /** Configure the single action button: its label, enabled state, and click handler. */
   function configureButton({ label, enabled, onClick }) {
     buttonEl.textContent = label;
@@ -70,5 +77,5 @@ export function createOverlay() {
     handler = enabled ? onClick || null : null;
   }
 
-  return { root, log, setSupport, setSessionState, configureButton };
+  return { root, log, setSupport, setSessionState, setInput, configureButton };
 }

@@ -23,13 +23,16 @@ export function getOverlayRoot(): HTMLElement {
 /** Shared panel style (dark, legible, unobtrusive). */
 export function styleAsPanel(el: HTMLElement): void {
   el.style.position = 'absolute';
-  el.style.background = 'rgba(12, 14, 18, 0.82)';
+  el.style.background = 'rgba(14, 16, 22, 0.9)';
   el.style.color = '#e8edf2';
   el.style.font = '13px/1.4 system-ui, -apple-system, sans-serif';
   el.style.padding = '10px 12px';
   el.style.borderRadius = '10px';
-  el.style.border = '1px solid rgba(255,255,255,0.08)';
+  el.style.border = '1px solid rgba(255,255,255,0.12)';
   el.style.backdropFilter = 'blur(6px)';
+  // Subtle lift so the dark panel separates cleanly from the brighter studio background, keeping the
+  // light text high-contrast regardless of what's behind it.
+  el.style.boxShadow = '0 4px 16px rgba(0,0,0,0.35)';
   el.style.pointerEvents = 'auto';
   el.style.userSelect = 'none';
   el.style.maxWidth = '320px';

@@ -21,8 +21,12 @@ export interface SceneRoots {
   readonly lightRoot: pc.Entity;
 }
 
-/** Neutral inspect-mode background (dark, non-distracting). Unused in AR. */
-const INSPECT_CLEAR = new pc.Color(0.04, 0.05, 0.06, 1);
+/**
+ * Neutral inspect-mode background: a mid **studio gray** — bright enough to read the scene and let
+ * the product stand out, calm enough not to distract. Inspect/preview ONLY; AR turns the color clear
+ * off entirely (`setArMode`), so this never paints over the see-through view.
+ */
+const INSPECT_CLEAR = new pc.Color(0.3, 0.32, 0.36, 1);
 
 export function createScene(app: pc.AppBase): SceneRoots {
   const camera = new pc.Entity('camera');

@@ -78,8 +78,8 @@ export class EnvironmentRoot {
 
   /**
    * Minimal neutral stand-in for NON-AR preview only: a matte floor + a faint grid of thin lines +
-   * a subtle low backdrop wall. Deliberately plain (no decoration) so it never competes with the
-   * cuff, and it is hidden entirely in AR.
+   * a subtle low backdrop wall. Tuned to a light studio gray so the preview reads clearly without
+   * competing with the cuff, and it is hidden entirely in AR.
    */
   private buildProceduralStandIn(): void {
     // Matte neutral floor. createPlane takes a Vec2 halfExtents (X, Z) — verified against the .d.ts.
@@ -88,7 +88,7 @@ export class EnvironmentRoot {
       halfExtents: new pc.Vec2(FLOOR_HALF, FLOOR_HALF),
     });
     const floorMat = createPbrMaterial({
-      diffuse: new pc.Color(0.16, 0.17, 0.19),
+      diffuse: new pc.Color(0.34, 0.36, 0.4),
       metalness: 0,
       roughness: 0.95,
     });
@@ -98,7 +98,7 @@ export class EnvironmentRoot {
 
     // Faint grid lines (thin boxes) for spatial reference. Built once; cheap, static.
     const gridMat = createPbrMaterial({
-      diffuse: new pc.Color(0.28, 0.3, 0.34),
+      diffuse: new pc.Color(0.5, 0.53, 0.58),
       metalness: 0,
       roughness: 0.9,
     });
@@ -133,7 +133,7 @@ export class EnvironmentRoot {
       halfExtents: new pc.Vec2(FLOOR_HALF, 0.9),
     });
     const backMat = createPbrMaterial({
-      diffuse: new pc.Color(0.12, 0.13, 0.15),
+      diffuse: new pc.Color(0.28, 0.3, 0.34),
       metalness: 0,
       roughness: 1.0,
     });

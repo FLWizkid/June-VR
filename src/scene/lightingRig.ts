@@ -21,9 +21,12 @@ import type { QualityProfile } from '../config/qualityProfiles';
 const log = createLogger('lighting');
 
 /** Neutral defaults used when no light estimation is available. */
-const DEFAULT_KEY_INTENSITY = 1.1;
+const DEFAULT_KEY_INTENSITY = 1.3;
 const DEFAULT_KEY_COLOR = new pc.Color(1.0, 0.98, 0.95);
-const DEFAULT_AMBIENT = new pc.Color(0.32, 0.34, 0.38);
+// Lifted ambient so the cuff/arm read clearly against the brighter studio background and aren't a
+// dark silhouette. In AR *with* light estimation this is overridden by the real-world estimate;
+// it only sets the baseline for inspect + AR-without-estimation, so no additive-display washout risk.
+const DEFAULT_AMBIENT = new pc.Color(0.42, 0.44, 0.48);
 
 export class LightingRig {
   private readonly app: pc.AppBase;

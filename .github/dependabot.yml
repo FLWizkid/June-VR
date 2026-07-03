@@ -17,9 +17,13 @@ updates:
         update-types:
           - 'patch'
           - 'minor'
-    # Never auto-bump major versions of PlayCanvas (breaking API risk).
+    # Never auto-bump major versions of these — breaking API risk; migrate deliberately.
     ignore:
       - dependency-name: 'playcanvas'
+        update-types: ['version-update:semver-major']
+      # Vite 8 broke the strict tsc gate (config/plugin API type change); pinned to v6
+      # until a tested migration is scheduled. See closed PR #8.
+      - dependency-name: 'vite'
         update-types: ['version-update:semver-major']
 
   # GitHub Actions

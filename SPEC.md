@@ -446,7 +446,10 @@ Runtime (requires WebXR device/browser — **cannot be verified in this environm
   and its captured target pose are unaffected. Each bend re-runs the placement floor clamp (A25) —
   the clamp only lifts, so straightening the arm can raise the scene but bending it back never
   lowers it (conservative; re-place to settle). A real arm GLB has no procedural pivot: bending is a
-  recorded no-op there until a rigged arm supplies its own elbow.
+  recorded no-op there until a rigged arm supplies its own elbow. **Startup facing:**
+  `ARM_POSE.rootEulerDeg` yaw is −90° so the folded forearm points to the **viewer's left** at
+  placement (with yaw 0 it pointed at the camera and read foreshortened); the upper-arm axis stays
+  vertical, so the cuff-frame alignment, band wrap, and elbow clearance cap are unaffected.
 - **A27.** **Decision (CLAUDE.md §4.1):** the prior ban on WebXR image/marker tracking (old A4/R3) is
   lifted; it is now implemented as a **first-class, ungated** feature (`src/ar/imageTracking.ts`,
   wired through `core/xrBootstrap.ts` + `core/app.ts`) — no `.supported`/fallback gate, allocation-free

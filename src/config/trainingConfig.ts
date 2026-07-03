@@ -120,8 +120,14 @@ export const ARM_POSE = {
    * The arm extends forward/down into a relaxed rest; final pose is finalized on-device.
    */
   rootPosition: { x: 0.0, y: 0.0, z: 0.0 },
-  /** Euler (deg) applied to the arm root so the limb lies in a comfortable extended rest. */
-  rootEulerDeg: { x: 0, y: 0, z: 0 },
+  /**
+   * Euler (deg) applied to the arm root — sets which way the limb FACES at startup. The −90° yaw
+   * turns the folded forearm to point to the VIEWER'S LEFT at the placement-time framing (the cuff
+   * root takes the camera's rotation when placed, so "left" tracks the user in preview and AR).
+   * With yaw 0 the forearm pointed straight at the viewer, which read as foreshortened.
+   * SME-REVIEW: startup facing is a presentation choice, not a postural claim.
+   */
+  rootEulerDeg: { x: 0, y: -90, z: 0 },
   /**
    * Elbow flexion (deg) between upper-arm and forearm (0 = straight). Starting/rest state: the arm
    * begins FOLDED AT 90° at the elbow (forearm horizontal). SME-REVIEW: teaching affordance, not a

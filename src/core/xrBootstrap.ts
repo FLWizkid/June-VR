@@ -19,16 +19,22 @@ import * as pc from 'playcanvas';
 import { createLogger } from '../utils/logging';
 import { APP_CONFIG } from '../config/appConfig';
 import type { QualityProfile } from '../config/qualityProfiles';
+import type { ImageTracker } from '../ar/imageTracking';
 
 const log = createLogger('xr');
 
-/** Optional WebXR feature strings we *request* (subject to UA support; all are then gated). */
+/**
+ * Optional WebXR feature strings we *request*. Every entry except `image-tracking` is then
+ * capability-gated on read (§4). `image-tracking` is the deliberate exception per CLAUDE.md §4.1:
+ * it is requested and used as a first-class, UNGATED feature (no `.supported`/fallback branch).
+ */
 const OPTIONAL_FEATURES: readonly string[] = [
   'hand-tracking',
   'hit-test',
   'anchors',
   'light-estimation',
   'depth-sensing',
+  'image-tracking',
   'local-floor',
   'bounded-floor',
 ];
@@ -40,9 +46,18 @@ export interface XrStartResult {
 
 export class XrBootstrap {
   private readonly app: pc.AppBase;
+  private imageTracker: ImageTracker | null = null;
 
   constructor(app: pc.AppBase) {
     this.app = app;
+  }
+
+  /**
+   * Attach the image tracker. Its markers are registered with the engine immediately before
+   * `xr.start` and it starts reporting poses once the session is live (CLAUDE.md §4.1, ungated).
+   */
+  setImageTracker(tracker: ImageTracker): void {
+    this.imageTracker = tracker;
   }
 
   /** True if the engine reports XR support at all. */
@@ -96,11 +111,19 @@ export class XrBootstrap {
     const xr = this.app.xr;
     if (!xr) return Promise.resolve({ ok: false, error: new Error('XR unavailable') });
 
+    // Register marker images with the engine tracker BEFORE the session starts (the engine rejects
+    // `add` once active). This is the WebXR trackedImages init list, managed engine-natively via
+    // `imageTracking.add()` — ungated per CLAUDE.md §4.1.
+    this.imageTracker?.prepareForSession();
+
     return new Promise((resolve) => {
       xr.start(camera, pc.XRTYPE_AR, spaceType, {
         framebufferScaleFactor: profile.framebufferScaleFactor,
         optionalFeatures: [...OPTIONAL_FEATURES],
         anchors: true,
+        // Image tracking is enabled unconditionally (first-class, ungated — CLAUDE.md §4.1), unlike
+        // the other subsystems which are gated on read after the session comes up.
+        imageTracking: true,
         // Request depth sensing (capability flag only in v1). Preferences are best-effort.
         depthSensing: {
           usagePreference: pc.XRDEPTHSENSINGUSAGE_CPU,
@@ -163,6 +186,14 @@ export class XrBootstrap {
       }
     } catch (e) {
       log.warn('lightEstimation.start failed', e);
+    }
+
+    // Image tracking is first-class and ungated (§4.1): its markers were registered in
+    // prepareForSession and the engine begins scoring them on session start. Nothing is gated here;
+    // per-frame poses flow through ImageTracker.update(). Log its state for diagnostics only.
+    const it = xr.imageTracking;
+    if (it) {
+      log.info(`image tracking active=${it.available} images=${it.images.length}`);
     }
   }
 

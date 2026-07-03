@@ -36,6 +36,13 @@ export interface XrFeatureCapabilities {
   readonly anchors: boolean;
   readonly depthSensing: boolean;
   readonly lightEstimation: boolean;
+  /**
+   * Whether the UA reports image tracking. INFORMATIONAL / diagnostics ONLY — per CLAUDE.md §4.1
+   * image tracking is a first-class, UNGATED feature, so this flag MUST NOT be used anywhere to
+   * decide whether image tracking runs or to select a fallback. It exists purely for the status
+   * panel / logs. (Every other flag here does gate its feature; this one does not.)
+   */
+  readonly imageTracking: boolean;
 }
 
 export const DEFAULT_XR_FEATURES: XrFeatureCapabilities = {
@@ -44,6 +51,7 @@ export const DEFAULT_XR_FEATURES: XrFeatureCapabilities = {
   anchors: false,
   depthSensing: false,
   lightEstimation: false,
+  imageTracking: false,
 };
 
 /**
@@ -131,7 +139,11 @@ export function readXrFeatures(app: pc.AppBase): XrFeatureCapabilities {
   // WebXR session's depth API surface if present.
   const depthSensing = sessionHasDepth(xr.session);
 
-  return { hitTest, handTracking, anchors, depthSensing, lightEstimation };
+  // Informational only (CLAUDE.md §4.1): image tracking is ungated. Reading this flag never gates
+  // the feature — it feeds the status panel/logs alongside the gated capabilities.
+  const imageTracking = boolOf(xr.imageTracking?.available) || boolOf(xr.imageTracking?.supported);
+
+  return { hitTest, handTracking, anchors, depthSensing, lightEstimation, imageTracking };
 }
 
 function boolOf(v: boolean | undefined | null): boolean {

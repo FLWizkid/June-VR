@@ -1,0 +1,107 @@
+/* Clean, readable overlay UI. Dark panel, high-contrast text, one obvious button. */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: #0b0d12;
+  color: #eaf1f7;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden;
+}
+
+#app-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none; /* let PlayCanvas handle pointer/touch input */
+}
+
+#ui-root {
+  position: fixed;
+  inset: 0;
+  pointer-events: none; /* clicks pass through to the canvas except on the panel/button */
+}
+
+#panel {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  width: min(360px, calc(100vw - 32px));
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: rgba(14, 18, 26, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+  pointer-events: auto; /* the panel itself is interactive */
+}
+
+#title {
+  font-weight: 700;
+  font-size: 16px;
+  margin-bottom: 10px;
+}
+
+.status {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #b9c6d3;
+}
+
+#support {
+  color: #eaf1f7;
+}
+
+#xr-button {
+  display: block;
+  width: 100%;
+  margin: 14px 0 6px;
+  padding: 14px 16px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #06121a;
+  background: linear-gradient(180deg, #7fd4ff, #38b6ff);
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(56, 182, 255, 0.35);
+}
+
+#xr-button:disabled {
+  color: #9aa3ad;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+#hint {
+  font-size: 12px;
+  color: #8a97a4;
+  margin: 8px 0 10px;
+  line-height: 1.4;
+}
+
+#log {
+  font-size: 12px;
+  line-height: 1.45;
+  color: #9fb0bf;
+  max-height: 168px;
+  overflow: hidden;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 8px;
+}
+
+.log-line {
+  padding: 1px 0;
+}
+
+.log-line:first-child {
+  color: #eaf1f7; /* newest line brightest */
+}

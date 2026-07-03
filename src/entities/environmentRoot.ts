@@ -78,8 +78,8 @@ export class EnvironmentRoot {
 
   /**
    * Minimal neutral stand-in for NON-AR preview only: a matte floor + a faint grid of thin lines +
-   * a subtle low backdrop wall. Deliberately plain (no decoration) so it never competes with the
-   * cuff, and it is hidden entirely in AR.
+   * a subtle low backdrop wall. Tuned to a light studio gray so the preview reads clearly without
+   * competing with the cuff, and it is hidden entirely in AR.
    */
   private buildProceduralStandIn(): void {
     // Matte neutral floor. createPlane takes a Vec2 halfExtents (X, Z) — verified against the .d.ts.
@@ -88,7 +88,9 @@ export class EnvironmentRoot {
       halfExtents: new pc.Vec2(FLOOR_HALF, FLOOR_HALF),
     });
     const floorMat = createPbrMaterial({
-      diffuse: new pc.Color(0.16, 0.17, 0.19),
+      // Lighter, neutral floor — this is the visible "background" at the bottom of the inspect frame,
+      // which the brief called out as too dark. Neutral (not blue) so the cool fills don't tint it.
+      diffuse: new pc.Color(0.46, 0.47, 0.48),
       metalness: 0,
       roughness: 0.95,
     });
@@ -98,7 +100,7 @@ export class EnvironmentRoot {
 
     // Faint grid lines (thin boxes) for spatial reference. Built once; cheap, static.
     const gridMat = createPbrMaterial({
-      diffuse: new pc.Color(0.28, 0.3, 0.34),
+      diffuse: new pc.Color(0.58, 0.59, 0.61),
       metalness: 0,
       roughness: 0.9,
     });
@@ -133,7 +135,12 @@ export class EnvironmentRoot {
       halfExtents: new pc.Vec2(FLOOR_HALF, 0.9),
     });
     const backMat = createPbrMaterial({
-      diffuse: new pc.Color(0.12, 0.13, 0.15),
+      // Calm, near-neutral studio gray. The camera clear color is OCCLUDED by this backdrop plane,
+      // so the visible "background" is this surface — it (not INSPECT_CLEAR) sets the background
+      // brightness. The key light rakes across it, so a modest albedo lands as a light-gray wall
+      // without blowing to white; neutralized off the previous blue cast. Dark UI panels carry their
+      // own backdrop, so they stay high-contrast against it.
+      diffuse: new pc.Color(0.4, 0.4, 0.41),
       metalness: 0,
       roughness: 1.0,
     });

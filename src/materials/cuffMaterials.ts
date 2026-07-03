@@ -47,8 +47,11 @@ const col = (r: number, g: number, b: number): pc.Color => new pc.Color(r, g, b)
  * additive see-through display (avoid pure black silhouettes; matte where physically matte).
  */
 const BASE_PARAMS: Record<CuffMaterialId, PbrParams> = {
-  // Woven nylon cuff body — navy/charcoal medical fabric, very rough, dielectric.
-  fabric: { diffuse: col(0.16, 0.2, 0.3), metalness: 0.0, roughness: 0.92, twoSided: false },
+  // Woven nylon cuff body — navy medical fabric, very rough, dielectric. Base albedo lifted off deep
+  // navy so lit fabric reads AS fabric rather than a near-black silhouette (the fabric dominates the
+  // close-up inspection frame and was falling to black on the walls the key light misses); still an
+  // unmistakable medical navy, not a toy blue (CLAUDE.md rule 2). Real texture sets layer on top.
+  fabric: { diffuse: col(0.32, 0.36, 0.48), metalness: 0.0, roughness: 0.92, twoSided: false },
   // Velcro hook side — darker, rough, micro-structured.
   velcroHook: { diffuse: col(0.12, 0.14, 0.18), metalness: 0.0, roughness: 0.85 },
   // Velcro loop side — slightly lighter fuzzy nap.

@@ -52,6 +52,19 @@ export class LightingRig {
     this.keyLight.setLocalEulerAngles(55, 30, 0);
     lightRoot.addChild(this.keyLight);
 
+    // Gentle fill from the opposite/lower side so the cuff's curved fabric band and the arm don't
+    // fall to near-black on the faces the single key light misses (product readability, CLAUDE.md
+    // rule 2). Subtle, no shadows, constant — light estimation only steers the key, not this.
+    const fill = new pc.Entity('fill-light');
+    fill.addComponent('light', {
+      type: 'directional',
+      color: new pc.Color(0.9, 0.93, 1.0),
+      intensity: 0.5,
+      castShadows: false,
+    });
+    fill.setLocalEulerAngles(-15, -150, 0);
+    lightRoot.addChild(fill);
+
     this.applyAmbient(DEFAULT_AMBIENT);
   }
 

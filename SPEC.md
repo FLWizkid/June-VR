@@ -284,7 +284,7 @@ Runtime (requires WebXR device/browser — **cannot be verified in this environm
   `.supported`/fallback discipline the other WebXR features use. Marker images come from the Room
   environment assets (`public/assets/tracking/`); a placeholder descriptor ships until the real bytes
   are supplied. Android XR docs don't yet list this module, so on-device support is **pending QA**
-  (verification reminder, not a gate). See A19.
+  (verification reminder, not a gate). See A27.
 - **A5.** No real cuff model/textures are present yet ⇒ **procedural placeholder cuff** (boxes/cylinder/
   torus primitives + procedurally generated textures) standing in, behind an isolated seam, with the
   exact same material/variant interfaces the real asset will use.
@@ -353,14 +353,6 @@ Runtime (requires WebXR device/browser — **cannot be verified in this environm
   marker shows the goal during the position step. Orientation/position tolerances are XR-interaction
   affordances, not clinical bands (SME-REVIEW). The training/animation tick is **allocation-free**
   (reused observation + validation-result structs, scratch math), consistent with §7.
-- **A19.** **Decision (CLAUDE.md §4.1):** the prior ban on WebXR image/marker tracking (old A4/R3) is
-  lifted; it is now implemented as a **first-class, ungated** feature (`src/ar/imageTracking.ts`,
-  wired through `core/xrBootstrap.ts` + `core/app.ts`) — no `.supported`/fallback gate, allocation-free
-  per-frame tick, reusing engine-native `imageTracking.add`. `config/capabilities.ts.imageTracking`
-  is informational-only and never used as a gate. A placeholder marker ships; real bytes come from the
-  Room environment assets. On-device support on Android XR is **pending QA** (their docs don't yet
-  list the module).
-
 ### Patient-arm / cuff-on-arm / IBL / tuning assumptions (this change)
 
 - **A19.** **No patient-arm asset is present** (`assets/models/patient_arm.glb` absent).
@@ -455,3 +447,10 @@ Runtime (requires WebXR device/browser — **cannot be verified in this environm
   the clamp only lifts, so straightening the arm can raise the scene but bending it back never
   lowers it (conservative; re-place to settle). A real arm GLB has no procedural pivot: bending is a
   recorded no-op there until a rigged arm supplies its own elbow.
+- **A27.** **Decision (CLAUDE.md §4.1):** the prior ban on WebXR image/marker tracking (old A4/R3) is
+  lifted; it is now implemented as a **first-class, ungated** feature (`src/ar/imageTracking.ts`,
+  wired through `core/xrBootstrap.ts` + `core/app.ts`) — no `.supported`/fallback gate, allocation-free
+  per-frame tick, reusing engine-native `imageTracking.add`. `config/capabilities.ts.imageTracking`
+  is informational-only and never used as a gate. A placeholder marker ships; real bytes come from the
+  Room environment assets. On-device support on Android XR is **pending QA** (their docs don't yet
+  list the module). (Renumbered from a duplicate A19 when merging with the scene-polish entries.)

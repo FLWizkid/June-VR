@@ -37,7 +37,9 @@ export class AnchorManager {
    */
   anchorAt(position: pc.Vec3, rotation: pc.Quat): Promise<boolean> {
     const anchors = this.app.xr?.anchors;
-    if (!anchors || !this.supported) return Promise.resolve(false);
+    // Anchors can only be created inside an ACTIVE XR session; attempting a create outside one (e.g.
+    // during non-AR inspect/placement) errors with "Anchors API is not available". Gate on it.
+    if (!anchors || !this.supported || !this.app.xr?.active) return Promise.resolve(false);
 
     this.clear();
 

@@ -33,6 +33,7 @@ import {
   DEVICE_SCREEN_REGION,
 } from '../entities/bloodPressureCuff';
 import type { CuffAnimator } from '../animation/cuffAnimator';
+import type { Stethoscope } from '../entities/stethoscope';
 import type { InflationController, ValveState } from './inflationController';
 
 export const enum CuffPart {
@@ -41,6 +42,7 @@ export const enum CuffPart {
   Device = 'device',
   Bulb = 'bulb',
   Screen = 'screen',
+  Stethoscope = 'stethoscope',
 }
 
 /** Press vs drag classification: shorter+stiller than this is a press. */
@@ -54,10 +56,15 @@ const FLOOR_Y = 0.01;
 const BAND_MARGIN_ELBOW = 0.005;
 const BAND_MARGIN_SHOULDER = 0.015;
 /**
- * Band-drag TIGHTEN gesture: the drag component perpendicular to the limb axis (pulling the strap
- * around the arm) adjusts snugness. Full range over this many meters of sideways drag.
+ * Band-drag sideways gesture ("pull the strap around the arm"). Which effect it has is
+ * step-contextual (set by CuffScene from the active training step):
+ *   - 'rotate' (default): spins the band around the limb — the orient-the-cuff exercise.
+ *   - 'tighten': adjusts snugness — the confirm-fit exercise.
+ * Full ranges over this many meters of sideways drag.
  */
+export type BandGesture = 'rotate' | 'tighten';
 const TIGHTEN_FULL_RANGE_M = 0.22;
+const ROTATE_DEG_PER_M = 400;
 
 export class PartsController {
   private readonly cuff: BloodPressureCuff;
@@ -85,6 +92,11 @@ export class PartsController {
   private pressCandidate = false;
   private startSlide = 0;
   private startTighten = 0;
+  private startRotation = 0;
+  private bandGesture: BandGesture = 'rotate';
+  /** Optional stethoscope prop (mounted under the cuff root by the training scene). */
+  private steth: Stethoscope | null = null;
+  private readonly startStethLocal = new pc.Vec3();
   /** True when the current gesture came from the hand path (point-driven, no ray). */
   private handGesture = false;
 
@@ -106,6 +118,16 @@ export class PartsController {
 
   setOnAssemblyDropped(cb: () => void): void {
     this.onAssemblyDropped = cb;
+  }
+
+  /** Select what the band's sideways drag does (step-contextual; set by CuffScene). */
+  setBandGesture(mode: BandGesture): void {
+    this.bandGesture = mode;
+  }
+
+  /** Register the stethoscope prop so it can be picked and placed. */
+  setStethoscope(steth: Stethoscope | null): void {
+    this.steth = steth;
   }
 
   /** Part currently being interacted with (null when idle). */
@@ -182,8 +204,10 @@ export class PartsController {
     this.startRootPos.copy(this.cuff.root.getPosition());
     this.startSlide = this.cuff.wrapSlide;
     this.startTighten = this.animator.tightenAmount;
+    this.startRotation = this.cuff.wrapRotation;
     const device = this.cuff.deviceEntity;
     if (device) this.startDeviceLocal.copy(device.getLocalPosition());
+    if (this.steth) this.startStethLocal.copy(this.steth.root.getLocalPosition());
   }
 
   private applyDrag(point: pc.Vec3): void {
@@ -204,6 +228,9 @@ export class PartsController {
         break;
       case CuffPart.Device:
         this.dragDevice(point);
+        break;
+      case CuffPart.Stethoscope:
+        this.dragStethoscope(point);
         break;
       default:
         break; // bulb/screen press candidates don't move anything until reclassified
@@ -267,13 +294,17 @@ export class PartsController {
 
     this.cuff.setWrapSlide(clamp(this.startSlide + along, min, max));
 
-    // Tighten: signed sideways component (limbAxis × cameraForward gives the screen-horizontal
-    // tangent). Drag right = tighter, left = looser.
+    // Sideways component (limbAxis × cameraForward gives the screen-horizontal tangent): rotates
+    // the band around the arm (orient exercise) or tightens it (confirm-fit exercise).
     tmp.vecC.cross(tmp.vecA, this.planeNormal);
     if (tmp.vecC.lengthSq() > 1e-6) {
       tmp.vecC.normalize();
       const sideways = tmp.vecB.dot(tmp.vecC);
-      this.animator.setTightenTarget(clamp(this.startTighten + sideways / TIGHTEN_FULL_RANGE_M, 0, 1));
+      if (this.bandGesture === 'tighten') {
+        this.animator.setTightenTarget(clamp(this.startTighten + sideways / TIGHTEN_FULL_RANGE_M, 0, 1));
+      } else {
+        this.cuff.setWrapRotation(this.startRotation + sideways * ROTATE_DEG_PER_M);
+      }
     }
   }
 
@@ -306,6 +337,27 @@ export class PartsController {
     this.cuff.invalidateAabb();
   }
 
+  /** Stethoscope: free placement in cuff-local space, leashed + floor-clamped like the device. */
+  private dragStethoscope(point: pc.Vec3): void {
+    const steth = this.steth;
+    if (!steth) return;
+    tmp.vecA.sub2(point, this.startPoint);
+    tmp.quatA.copy(this.cuff.root.getRotation()).invert();
+    tmp.quatA.transformVector(tmp.vecA, tmp.vecB);
+    tmp.vecC.add2(this.startStethLocal, tmp.vecB);
+    const dist = tmp.vecC.length();
+    if (dist > DEVICE_LEASH_M) tmp.vecC.mulScalar(DEVICE_LEASH_M / dist);
+    steth.root.setLocalPosition(tmp.vecC);
+    const world = steth.root.getPosition();
+    if (world.y < FLOOR_Y) {
+      tmp.vecD.set(0, FLOOR_Y - world.y, 0);
+      tmp.quatA.transformVector(tmp.vecD, tmp.vecE);
+      tmp.vecC.add(tmp.vecE);
+      steth.root.setLocalPosition(tmp.vecC);
+    }
+    this.cuff.invalidateAabb();
+  }
+
   // ------------------------------------------------------------------ picking
 
   /** Build a world ray through the screen point. False if no camera component. */
@@ -335,6 +387,8 @@ export class PartsController {
     // The connecting hose is grabbable and drags the device unit (it is plumbed into it).
     const hoseBox = this.cuff.hoseWorldAabb();
     if (hoseBox && hoseBox.intersectsRay(this.ray, this.hitPoint)) return CuffPart.Device;
+    const stethBox = this.steth?.worldAabb() ?? null;
+    if (stethBox && stethBox.intersectsRay(this.ray, this.hitPoint)) return CuffPart.Stethoscope;
     const whole = this.cuff.worldAabb();
     if (whole.intersectsRay(this.ray, this.hitPoint)) return CuffPart.Assembly;
     return null;
@@ -398,6 +452,8 @@ export class PartsController {
     if (deviceBox && containsWithMargin(deviceBox, point, 0.02)) return CuffPart.Device;
     const hoseBox = this.cuff.hoseWorldAabb();
     if (hoseBox && containsWithMargin(hoseBox, point, 0.02)) return CuffPart.Device;
+    const stethBox = this.steth?.worldAabb() ?? null;
+    if (stethBox && containsWithMargin(stethBox, point, 0.02)) return CuffPart.Stethoscope;
     return null; // assembly / empty space → default whole grab
   }
 

@@ -25,6 +25,7 @@ import type { CuffMaterialLibrary } from '../materials/cuffMaterials';
 import { CuffSize } from '../entities/cuffVariants';
 import { EnvironmentRoot } from '../entities/environmentRoot';
 import { PatientArm } from '../entities/patientArm';
+import { Stethoscope, STETHOSCOPE_HOME } from '../entities/stethoscope';
 import { ARM_POSE, CUFF_ON_ARM } from '../config/trainingConfig';
 import { CuffScene, type CuffSceneDeps } from './cuffScene';
 
@@ -38,6 +39,8 @@ export class TrainingScene {
   readonly cuffScene: CuffScene;
   /** The patient arm (foreground target; shown in AR; toggleable). */
   readonly patientArm: PatientArm;
+  /** The stethoscope prop (foreground instrument; shown in AR; grab + place). */
+  readonly stethoscope: Stethoscope;
   /** The environment seam/stand-in (independent transform; hidden in AR). */
   readonly environment: EnvironmentRoot;
 
@@ -55,6 +58,11 @@ export class TrainingScene {
     this.patientArm = new PatientArm(deps.device, deps.assets);
     this.armMount = new pc.Entity('arm-mount');
     this.armMount.addChild(this.patientArm.root);
+
+    // Stethoscope prop: mounted under the cuff root after each build (it rides assembly moves and
+    // the floor clamp); registered with the part-interaction layer for grab + place.
+    this.stethoscope = new Stethoscope(deps.device);
+    this.cuffScene.registerStethoscope(this.stethoscope);
 
     // Environment mounted under the SAME world root, independent of the cuff transform.
     this.environment = new EnvironmentRoot(deps.device, deps.assets);
@@ -86,10 +94,38 @@ export class TrainingScene {
     if (wrapOnArm) {
       this.cuffScene.cuff.root.addChild(this.armMount);
       this.positionArmUnderCuff(frame.node);
-      // The arm hangs below the cuff, so re-clamp the placed content above the floor plane now that
-      // the full cuff-on-arm extent is known (initial placement ran before the arm was mounted).
-      this.cuffScene.reclampPlacement();
     }
+    this.mountStethoscope();
+    // The arm hangs below the cuff, so re-clamp the placed content above the floor plane now that
+    // the full cuff-on-arm extent is known (initial placement ran before the arm was mounted).
+    this.cuffScene.reclampPlacement();
+  }
+
+  /** Park the stethoscope at its home offset under the cuff root. */
+  private mountStethoscope(): void {
+    this.cuffScene.cuff.root.addChild(this.stethoscope.root);
+    this.stethoscope.root.setLocalPosition(STETHOSCOPE_HOME.x, STETHOSCOPE_HOME.y, STETHOSCOPE_HOME.z);
+  }
+
+  /**
+   * Swap the cuff size. `cuff.build()` clears ALL children under the cuff root — including the
+   * mounted patient arm and stethoscope — so they are detached first and re-mounted after the
+   * rebuild (previously a size swap silently DESTROYED the mounted arm). The band keeps its
+   * arm-wrap configuration (the radius/offsets persist on the cuff entity).
+   */
+  async setSize(size: CuffSize): Promise<void> {
+    const cuffRoot = this.cuffScene.cuff.root;
+    if (this.armMount.parent === cuffRoot) cuffRoot.removeChild(this.armMount);
+    if (this.stethoscope.root.parent === cuffRoot) cuffRoot.removeChild(this.stethoscope.root);
+
+    await this.cuffScene.setSize(size);
+
+    if (this.patientArm.isVisible) {
+      cuffRoot.addChild(this.armMount);
+      this.positionArmUnderCuff(this.patientArm.cuffFrame.node);
+    }
+    this.mountStethoscope();
+    this.cuffScene.reclampPlacement();
   }
 
   /**

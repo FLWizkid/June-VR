@@ -139,6 +139,8 @@ export class BloodPressureCuff {
   private readonly deviceAabb = new pc.BoundingBox();
   /** Current band slide offset (m) along the limb axis (cuff-local Y). */
   private wrapSlideY = 0;
+  /** Current band rotation (deg) around the limb axis (0 = built orientation, marker at +Z). */
+  private wrapRotDeg = 0;
 
   // --- cuff↔device connecting hose (composite mode) ---
   private hoseRoot: pc.Entity | null = null;
@@ -209,6 +211,7 @@ export class BloodPressureCuff {
     this.hoseRoot = null;
     this.deviceEntityRef = null;
     this.wrapSlideY = 0;
+    this.wrapRotDeg = 0;
     this.needle = null;
     this.wrapNode = null;
     this.wrapBody = null;
@@ -302,6 +305,25 @@ export class BloodPressureCuff {
     return this.wrapSlideY;
   }
 
+  /**
+   * Rotate the band around the limb axis (deg; 0 = built orientation with the artery marker at
+   * local +Z). Drives the orient-the-cuff exercise: the marker, Velcro, label, and the hose exit
+   * all swing with it. Allocation-free; event-rate.
+   */
+  setWrapRotation(deg: number): void {
+    const body = this.wrapBody;
+    if (!body) return;
+    this.wrapRotDeg = deg;
+    body.setLocalEulerAngles(0, deg, 0);
+    this.refreshHose();
+    this.aabbDirty = true;
+  }
+
+  /** Current band rotation (deg) around the limb axis. */
+  get wrapRotation(): number {
+    return this.wrapRotDeg;
+  }
+
   /** World AABB of the fabric band (for part picking). Reuses a private box; do not retain. */
   bandWorldAabb(): pc.BoundingBox | null {
     return unionAabb(this.bandMeshInstances, this.bandAabb);
@@ -370,8 +392,14 @@ export class BloodPressureCuff {
     const device = this.deviceEntityRef;
     if (!this.hoseRoot || !device || this.hoseSegments.length === 0) return;
 
-    // Band port (cuff-local): top rim of the band on its +Z face, riding the slide offset.
-    this.hoseTmpA.set(0, this.wrapSlideY + this.bandWidthAlong * 0.5, this.bandOuterRadius * 0.9);
+    // Band port (cuff-local): top rim of the band at the tubing-exit side (the marker face),
+    // riding both the slide offset and the band's rotation around the limb.
+    const rotRad = (this.wrapRotDeg * Math.PI) / 180;
+    this.hoseTmpA.set(
+      Math.sin(rotRad) * this.bandOuterRadius * 0.9,
+      this.wrapSlideY + this.bandWidthAlong * 0.5,
+      Math.cos(rotRad) * this.bandOuterRadius * 0.9,
+    );
     // Device port (cuff-local): mesh-local port transformed by the device's local pose.
     this.hoseTmpB.set(HOSE_DEVICE_PORT_MESH.x, HOSE_DEVICE_PORT_MESH.y, HOSE_DEVICE_PORT_MESH.z);
     device.getLocalRotation().transformVector(this.hoseTmpB, this.hoseTmpB);

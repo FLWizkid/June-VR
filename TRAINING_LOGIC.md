@@ -165,7 +165,21 @@ Each item is also flagged `SME-REVIEW:` at its source. None is asserted as clini
     arc-center) and the procedural dial art draws the demo systolic (red) / diastolic (green)
     markers plus a 260–300 mmHg red zone. All positions/values are illustrative teaching cues
     pending SME confirmation (marker landmark: item 11; demo values: item 4).
-14. **Manual pump / valve / heartbeat cue** (`PUMP_INTERACTION` in `config/trainingConfig.ts`;
+14. **Orient-the-cuff exercise** (`interaction/trainingStepController.ts`,
+    `interaction/partsController.ts`, `config/trainingConfig.ts orientStartOffsetDeg`). Entering the
+    orient step (guided/placement) rotates the band **+120°** off the taught alignment; the learner
+    rotates it back (sideways band drag, ~400°/m of hand travel) to within
+    `orientationToleranceDeg`. Orientation error is now measured as the band's rotation around the
+    limb away from its BUILT alignment (which stands in for "artery marker over the brachial
+    artery") — it replaced the earlier captured-reference-pose comparison, which was trivially
+    satisfied. SME-REVIEW: the start offset, gesture sensitivity, and the built-alignment-as-correct
+    assumption are exercise scaffolding, not validated anatomy.
+15. **Stethoscope + patient torso props** (`entities/stethoscope.ts`, `entities/patientArm.ts`).
+    Presentational stand-ins only: the stethoscope can be grabbed and placed but NO step validates
+    its placement yet (taught site — brachial artery at the antecubital fossa — is a future
+    curriculum item); the gowned torso/head give the limb a patient context and are not
+    anthropometric. SME-REVIEW when a listening/auscultation step is added.
+16. **Manual pump / valve / heartbeat cue** (`PUMP_INTERACTION` in `config/trainingConfig.ts`;
     `interaction/inflationController.ts`). The trainee can pump the bulb (each squeeze **+15 mmHg**,
     plausible but not device-measured), and work a 3-state release valve (**closed → controlled →
     open**; controlled reuses `controlledDeflateMmHgPerSec`, full-open dumps at **40 mmHg/s**, an

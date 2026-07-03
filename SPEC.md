@@ -474,7 +474,7 @@ Runtime (requires WebXR device/browser — **cannot be verified in this environm
   is mirrored by the cap UVs and its text is illegible at this size regardless). (4) Manual
   pump/valve piggyback on the SAME inflation owner and surface the SAME phases the training brain
   already observes (pump→inflating, reserve empty→holding, valve→deflating), so no state-machine or
-  scoring change; the heartbeat bounce is displayed-value-only (TRAINING_LOGIC §7 item 14).
+  scoring change; the heartbeat bounce is displayed-value-only (TRAINING_LOGIC §7 item 16).
   (5) The preview orbit camera now also clamps above the floor (a low target + long zoom could put
   the eye under y=0, where a grazing grid line rendered as a huge dark wedge — root cause of the
   artifact first seen after the arm-yaw change), and its orbit target is smoothed so assembly drags
@@ -499,3 +499,22 @@ Runtime (requires WebXR device/browser — **cannot be verified in this environm
   CLAUDE.md gauge spec. (5) **AR permanence**: CLAUDE.md §4 + §7 item 9 (mirrored in AGENTS.md /
   .cursorrules) now record the standing owner order that immersive-AR support may never be removed,
   disabled, or made non-default; preview modes support AR and the terminal mirror, never replace it.
+- **A30.** **Orient exercise, rotatable band, stethoscope, torso, furniture, size-swap fix.**
+  (1) The band is now ROTATABLE around the limb (`setWrapRotation`; the artery marker, Velcro, label
+  and the hose exit all swing with it), and the band's sideways drag is STEP-CONTEXTUAL: 'tighten'
+  during confirm-fit, 'rotate' otherwise (set per frame by CuffScene from the machine's step).
+  (2) The orient step became a real exercise: entry applies `orientStartOffsetDeg` (+120°,
+  SME-flagged), the learner rotates back within `orientationToleranceDeg`, and orientation error is
+  measured from the band's rotation (replacing the trivially-satisfied captured-pose comparison) —
+  TRAINING_LOGIC §7 item 14. Verified end-to-end (enter 120° misoriented → drag → 10° → advance).
+  (3) NEW `entities/stethoscope.ts`: procedural chrome/rubber stethoscope prop, grabbable +
+  placeable (leash + floor clamp), mounted under the cuff root; presentational only until an
+  auscultation step exists (§7 item 15). (4) The patient arm gained a gowned TORSO + neck + head
+  (cosmetic, rides the limb root, hidden with `setArmVisible`). (5) Exam-room furniture stand-ins
+  (exam table + equipment cart) live inside the environment root — PREVIEW ONLY, auto-hidden in AR
+  like the rest of the stand-in. (6) **Size-swap destruction fix**: `cuff.build()` clears the cuff
+  root's children, so cycling size DESTROYED the mounted arm (and would have destroyed the
+  stethoscope); size changes now route through `TrainingScene.setSize`, which detaches and
+  re-mounts both around the rebuild, re-aligns the arm, re-runs the floor clamp — and re-applies the
+  orient offset if the learner is mid-orient (a rebuild zeroes band rotation, which would silently
+  pass the step). All new geometry is build-time; drags/relays stay event-rate and allocation-free.

@@ -23,10 +23,13 @@ const log = createLogger('lighting');
 /** Neutral defaults used when no light estimation is available. */
 const DEFAULT_KEY_INTENSITY = 1.3;
 const DEFAULT_KEY_COLOR = new pc.Color(1.0, 0.98, 0.95);
-// Lifted ambient so the cuff/arm read clearly against the brighter studio background and aren't a
-// dark silhouette. In AR *with* light estimation this is overridden by the real-world estimate;
-// it only sets the baseline for inspect + AR-without-estimation, so no additive-display washout risk.
-const DEFAULT_AMBIENT = new pc.Color(0.42, 0.44, 0.48);
+// Moderate ambient floor so surfaces never fall to pure black. NOTE: constant ambientLight has a
+// small absolute contribution here (no env atlas), so it alone can't rescue the cuff's camera-facing
+// walls — that's the camera-direction FILL light's job below. Kept moderate so distinct PBR
+// materials still read (no washout, CLAUDE.md rule 2). In AR *with* light estimation this is
+// overridden by the real-world estimate; it only sets the baseline for inspect + AR-without-
+// estimation, so no additive-display washout risk.
+const DEFAULT_AMBIENT = new pc.Color(0.55, 0.55, 0.56);
 
 export class LightingRig {
   private readonly app: pc.AppBase;
@@ -52,18 +55,33 @@ export class LightingRig {
     this.keyLight.setLocalEulerAngles(55, 30, 0);
     lightRoot.addChild(this.keyLight);
 
-    // Gentle fill from the opposite/lower side so the cuff's curved fabric band and the arm don't
-    // fall to near-black on the faces the single key light misses (product readability, CLAUDE.md
-    // rule 2). Subtle, no shadows, constant — light estimation only steers the key, not this.
-    const fill = new pc.Entity('fill-light');
-    fill.addComponent('light', {
-      type: 'directional',
-      color: new pc.Color(0.9, 0.93, 1.0),
-      intensity: 0.5,
-      castShadows: false,
-    });
-    fill.setLocalEulerAngles(-15, -150, 0);
-    lightRoot.addChild(fill);
+    // Soft STUDIO FILL DOME (no-asset stand-in for the "key + IBL" ideal; a real/procedural env atlas
+    // via scene.envAtlas is the documented follow-up — SPEC §12). Constant scene.ambientLight is too
+    // weak here to lift the cuff's outward-/side-facing fabric walls (they read near-black under key
+    // alone), so three cool, shadowless directional fills bracket the product the way a softbox rig
+    // would: one down the camera axis, and one from each side aimed at the ±X flanks the close-up
+    // inspection camera actually sees. Kept well below the warm key so it lifts the darks toward a
+    // readable navy without flattening form or washing the material out (CLAUDE.md rules 2 & 3). Light
+    // estimation steers only the key, so AR realism is unaffected.
+    // Near-neutral (barely cool) fill — three of these were stacking a noticeable cold-blue cast onto
+    // the floor and cuff; pulled toward white so the scene reads neutral, not cold (cold reads "dark").
+    const FILL_COLOR = new pc.Color(0.97, 0.98, 1.0);
+    const addFill = (name: string, pitch: number, yaw: number, intensity: number): void => {
+      const fill = new pc.Entity(name);
+      fill.addComponent('light', {
+        type: 'directional',
+        color: FILL_COLOR.clone(),
+        intensity,
+        castShadows: false,
+      });
+      fill.setLocalEulerAngles(pitch, yaw, 0);
+      lightRoot.addChild(fill);
+    };
+    // Camera-axis fill: lifts the big camera-facing fabric walls the steep key rakes past.
+    addFill('fill-front', 18, 12, 0.6);
+    // Side fills from ±X (traveling inward): catch the left/right flanks curving away from the camera.
+    addFill('fill-left', 15, -90, 0.4);
+    addFill('fill-right', 15, 90, 0.35);
 
     this.applyAmbient(DEFAULT_AMBIENT);
   }

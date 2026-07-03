@@ -396,3 +396,20 @@ Runtime (requires WebXR device/browser — **cannot be verified in this environm
   inspect-mode startup completes (~0.2 s) and renders the scene; real WebXR/AR + hand-tracking remain
   an on-device check. **Known limitation:** KTX2 texture seams (IBL atlas + file-mode cuff textures)
   stay inert until `pc.basisInitialize(...)` is wired in `assetRegistry.ts`.
+- **A24.** **Inspect-mode readability tuning (background + cuff not-too-dark).** The non-AR inspect view
+  is a deliberate **close-up** (6–12 in, `INSPECTION_RANGE_METERS`), so a navy cuff fills the frame; it
+  was reading too dark (near-black fabric walls, dim/blue-cast background). Tuned, verified against the
+  headless smoke render: (1) the **visible background** is the procedural stand-in surfaces (the camera
+  `clearColor` is occluded by the backdrop plane), so **floor/backdrop/grid albedos were lifted and
+  neutralized** rather than the clear color; (2) the cuff's outward-/side-facing **fabric walls** get
+  ~0 direct light from the steep key and constant `scene.ambientLight` is too weak to lift them, so a
+  small **shadowless studio "fill dome"** (camera-axis + two ±X side fills) was added and the **fabric
+  base albedo raised** off deep navy to a readable medium navy (still not a toy blue — CLAUDE.md rule 2);
+  (3) `DEFAULT_AMBIENT` raised and the fills **neutralized toward white** to kill a cold blue cast.
+  UI panels keep their own dark backdrop + shadow, so text contrast is preserved against the brighter
+  scene. **Best-practice follow-up:** the fill dome is a **no-asset stand-in for the intended "one key
+  + IBL"** (CLAUDE.md rule 3); dropping a real/prefiltered **env atlas** into the `scene.envAtlas` seam
+  (A21) — or generating a procedural one via `pc.EnvLighting.generateAtlas` — would light the cuff
+  omnidirectionally and let the extra fills be retired. **Caveat:** the headless SwiftShader render is
+  only a proxy; on-device GPU PBR + WebXR **light estimation** (which overrides the key/ambient in AR)
+  is the real appearance and remains an on-device check.

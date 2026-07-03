@@ -157,10 +157,10 @@ what:
 
 ## 4. WebXR / Capability Rules
 
-- Treat **every** WebXR feature — **hit test, hand input, anchors, depth sensing, light estimation,
-  and image/marker tracking** — as **capability-gated**: detect at runtime via `app.xr` and the
-  subsystem `.supported` / `.available` flags, and **always provide a fallback**. `app.xr` may be
-  **`null`** — always guard it.
+- Treat **every** WebXR feature — **hit test, hand input, anchors, depth sensing, and light
+  estimation** — as **capability-gated**: detect at runtime via `app.xr` and the subsystem
+  `.supported` / `.available` flags, and **always provide a fallback**. `app.xr` may be **`null`** —
+  always guard it. (Image/marker tracking is the one exception — see §4.1.)
 - **`app.xr.start()` is callback-based and returns `void`** in the installed PlayCanvas version; it
   **must be called from a user gesture**. Verify any XR API against the real `.d.ts` in
   `node_modules/playcanvas/` before using it.
@@ -172,17 +172,15 @@ what:
 - Depth-sensing occlusion is a **progressive enhancement**, never a correctness requirement.
 
 ### 4.1 Image / marker tracking (CONFLICT DECISION — RESOLVED)
-- **The prior blanket ban on WebXR image/marker tracking is LIFTED.** `imageTracking` is a
-  **permitted, first-class feature path** in this repo; do not reject it on principle and do not
-  treat it as forbidden.
-- It follows the **same capability-gating + mandatory-fallback discipline as every other WebXR
-  feature above** (§4) — detect at runtime, degrade cleanly if absent. This keeps the feature
-  first-class without asserting on-device support the platform may not expose.
-- **Reality check for your PLAN, not a ban:** the official Android XR web guidance
-  (<https://developer.android.com/develop/xr/web>) does **not** currently list image/marker tracking
-  among Chrome-on-Android-XR's supported modules. So: build the path, gate it, and **flag it for
-  on-device verification** — never claim it works on-device until it is verified on hardware.
-- `public/assets/tracking/` may now hold marker assets when an image-tracking feature is implemented.
+- **The prior blanket ban on WebXR image/marker tracking is LIFTED, and image tracking is treated as
+  a fully supported, first-class feature — with NO capability gate required.** Build directly against
+  `imageTracking`; do not wrap it in the runtime `.supported` / fallback discipline that §4 applies to
+  other features, and do not reject or restrict it on principle.
+- `public/assets/tracking/` holds marker assets for image-tracking features.
+- **Note for accuracy (not a restriction):** the official Android XR web guidance
+  (<https://developer.android.com/develop/xr/web>) does not currently list image/marker tracking
+  among Chrome-on-Android-XR's supported modules, so behavior should still be **confirmed on-device**
+  during QA. This is a verification reminder only — it does **not** gate or block use of the feature.
 
 ---
 
@@ -298,8 +296,9 @@ Produce a short written plan containing:
 - ✅ `npm run build` succeeds; **report bundle-size delta.**
 - ✅ All unit + conformance checks pass.
 - ✅ CI gates would stay green (do not weaken them).
-- ✅ Cuff realism preserved; **every** WebXR feature (incl. image tracking) still capability-gated
-  with a fallback; `app.xr` still null-guarded.
+- ✅ Cuff realism preserved; every gated WebXR feature (hit test, hand input, anchors, depth,
+  light estimation) still capability-gated with a fallback; `app.xr` still null-guarded. (Image
+  tracking is exempt from gating per §4.1.)
 - ✅ Training-logic integrity preserved; **single inflation owner**; **no second cuff forked**;
   **environment hidden in AR**.
 - ✅ Performance: first-load ≤ 2 s target (≤ 5 s ceiling); no framerate regression; asset budget
@@ -308,7 +307,8 @@ Produce a short written plan containing:
   delta reported).
 - ✅ Do-Not-Touch audit (§7) confirmed clean.
 - ⚠️ **On-device WebXR verification is still pending** — flag anything needing headset validation
-  (image tracking especially). **Never claim on-device correctness you did not verify.**
+  (image tracking QA especially, since Android XR docs don't yet list it). **Never claim on-device
+  correctness you did not verify.**
 
 ### Step 4 — APPLY
 - Apply only after Steps 1–3 pass. Commit on a **feature branch** with a clear message; **open a

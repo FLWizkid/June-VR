@@ -15,6 +15,7 @@
 import * as pc from 'playcanvas';
 import type { CuffMaterialId } from './cuffMaterials';
 import type { AssetRegistry } from '../core/assetRegistry';
+import { TRAINING_CLINICAL } from '../config/trainingConfig';
 
 export type TextureSource = 'procedural' | 'file';
 
@@ -195,6 +196,7 @@ export class TextureSetProvider {
     const ctx = newCanvas(256);
     if (!ctx) return null;
     const { canvas } = ctx;
+    const dialAngle = (v: number): number => -Math.PI * 0.75 + (v / 300) * Math.PI * 1.5;
     ctx.fillStyle = '#f4f4f0';
     ctx.fillRect(0, 0, 256, 256);
     ctx.translate(128, 128);
@@ -204,9 +206,33 @@ export class TextureSetProvider {
     ctx.beginPath();
     ctx.arc(0, 0, 110, 0, Math.PI * 2);
     ctx.stroke();
+
+    // Red danger zone arc at the top of the range (CLAUDE.md gauge spec).
+    ctx.strokeStyle = '#c1272d';
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.arc(0, 0, 101, dialAngle(260), dialAngle(300));
+    ctx.stroke();
+
+    // Demo systolic/diastolic teaching markers (SME-REVIEW: illustrative values from
+    // TRAINING_CLINICAL, not a measured reading) — the observe step asks the learner to watch the
+    // needle fall through these marks.
+    const marker = (v: number, color: string): void => {
+      const a = dialAngle(v);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * 80, Math.sin(a) * 80);
+      ctx.lineTo(Math.cos(a) * 106, Math.sin(a) * 106);
+      ctx.stroke();
+    };
+    marker(TRAINING_CLINICAL.demoSystolicMmHg, '#c1272d'); // systolic — red
+    marker(TRAINING_CLINICAL.demoDiastolicMmHg, '#1f7a33'); // diastolic — green
+
     // Tick marks 0..300 mmHg around ~270 degrees.
+    ctx.strokeStyle = '#1a1c1f';
     for (let v = 0; v <= 300; v += 10) {
-      const a = -Math.PI * 0.75 + (v / 300) * Math.PI * 1.5;
+      const a = dialAngle(v);
       const major = v % 20 === 0;
       const r0 = major ? 86 : 96;
       ctx.beginPath();

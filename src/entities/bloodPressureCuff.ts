@@ -51,6 +51,29 @@ const CUFF_BAND_STAVES = 21;
 const GAUGE_SLAB_THICKNESS = 0.054;
 const GAUGE_RADIAL_SEGMENTS = 48;
 
+/**
+ * Live gauge overlay placement on the REAL device GLB (composite mode). The shipped GLB is ONE
+ * merged mesh whose dial is a static baked texture — it has no needle node to drive — so a small
+ * procedural dial face + needle is overlaid on the device's screen panel and driven by the existing
+ * GaugeController. Coordinates are in the render entity's LOCAL (= glTF mesh) space: the entity
+ * root carries the GLB node's +90° X rotation (verified in the runtime graph), so mesh-space
+ * "screen panel" bounds are x ±0.081, z −0.402→−0.26, surface facing +Y. Cosmetic; finalized
+ * on-device.
+ */
+const DEVICE_DIAL = { x: 0, y: 0.004, z: -0.331, radius: 0.062 } as const;
+
+/**
+ * Interaction pick regions on the device, in the SAME mesh-local space (from the GLB primitive
+ * bounds). The GLB is one mesh (no bulb/tube nodes), so the bulb and the gauge screen are addressed
+ * as spatial regions: clicking/pinching the bulb region pumps; the screen region works the valve.
+ * Used by interaction/partsController.ts.
+ */
+export const DEVICE_BULB_REGION = { x: 0.079, y: -0.007, z: -0.049, radius: 0.055 } as const;
+export const DEVICE_SCREEN_REGION = {
+  min: { x: -0.09, y: -0.05, z: -0.41 },
+  max: { x: 0.09, y: 0.05, z: -0.25 },
+} as const;
+
 export class BloodPressureCuff {
   /** Root entity; parent this under the world/anchor root. */
   readonly root: pc.Entity;
@@ -91,6 +114,17 @@ export class BloodPressureCuff {
   private wrapIsBand = false;
   /** Local offset for the real device GLB (so it stands beside an arm). Default: no offset. */
   private readonly deviceLocalOffset = new pc.Vec3(0, 0, 0);
+
+  /** The instantiated device GLB entity (composite mode), for per-part interaction. Null until built. */
+  private deviceEntityRef: pc.Entity | null = null;
+  /** Mesh instances of the fabric band (wrap body subtree) / device, for part AABBs. Build-time. */
+  private readonly bandMeshInstances: pc.MeshInstance[] = [];
+  private readonly deviceMeshInstances: pc.MeshInstance[] = [];
+  /** Reused boxes for part AABB queries (recomputed on demand; allocation-free for callers). */
+  private readonly bandAabb = new pc.BoundingBox();
+  private readonly deviceAabb = new pc.BoundingBox();
+  /** Current band slide offset (m) along the limb axis (cuff-local Y). */
+  private wrapSlideY = 0;
 
   /** Cached world-space AABB and the parameters it was computed for. */
   private readonly cachedAabb = new pc.BoundingBox();
@@ -134,6 +168,10 @@ export class BloodPressureCuff {
     this.clearChildren();
     this.highlightTargets.length = 0;
     this.allMeshInstances.length = 0;
+    this.bandMeshInstances.length = 0;
+    this.deviceMeshInstances.length = 0;
+    this.deviceEntityRef = null;
+    this.wrapSlideY = 0;
     this.needle = null;
     this.wrapNode = null;
     this.wrapBody = null;
@@ -201,6 +239,40 @@ export class BloodPressureCuff {
     this.deviceLocalOffset.set(x, y, z);
   }
 
+  /** The device GLB entity (composite mode) for per-part interaction; null in full-procedural mode. */
+  get deviceEntity(): pc.Entity | null {
+    return this.deviceEntityRef;
+  }
+
+  /**
+   * Slide the fabric band along the limb axis (cuff-local Y, 0 = the built cuff site). Range
+   * clamping is owned by the caller (interaction/partsController.ts derives it from the arm
+   * segment). Moves the swell group, so swell/velcro/label ride along. Allocation-free.
+   */
+  setWrapSlide(y: number): void {
+    const body = this.wrapBody;
+    if (!body) return;
+    this.wrapSlideY = y;
+    const p = body.getLocalPosition();
+    body.setLocalPosition(p.x, y, p.z);
+    this.aabbDirty = true;
+  }
+
+  /** Current band slide offset (m) along the limb axis. */
+  get wrapSlide(): number {
+    return this.wrapSlideY;
+  }
+
+  /** World AABB of the fabric band (for part picking). Reuses a private box; do not retain. */
+  bandWorldAabb(): pc.BoundingBox | null {
+    return unionAabb(this.bandMeshInstances, this.bandAabb);
+  }
+
+  /** World AABB of the device GLB (for part picking). Reuses a private box; do not retain. */
+  deviceWorldAabb(): pc.BoundingBox | null {
+    return unionAabb(this.deviceMeshInstances, this.deviceAabb);
+  }
+
   /**
    * REAL-ASSET PATH. Instantiates the GLB and binds materials by submesh/material slot name.
    * Returns false if loading/instantiation failed so the caller can fall back to procedural.
@@ -228,9 +300,68 @@ export class BloodPressureCuff {
       }
     }
 
-    // TODO(real-assets): if the model tags a needle node (e.g. named "needle"), capture it:
-    //   this.needle = entity.findByName('needle') as pc.Entity | null;
+    // The shipped GLB is one merged mesh (no tagged needle node), so a live procedural dial +
+    // needle is overlaid on its screen panel instead — see buildGaugeOverlay.
+    this.deviceEntityRef = entity;
+    this.deviceMeshInstances.length = 0;
+    for (const render of renders) {
+      for (const mi of render.meshInstances ?? []) this.deviceMeshInstances.push(mi);
+    }
+    this.buildGaugeOverlay(entity);
     return true;
+  }
+
+  /**
+   * Live aneroid dial overlaid on the device GLB's (static, baked) screen panel: procedural dial
+   * face + bezel + needle, with the needle pivot exposed as `gaugeNeedle` so the EXISTING
+   * GaugeController drives it in composite mode too (previously the composite gauge never moved).
+   * The carrier orients the pivot so its local +Y is the panel normal (device +Z); the controller
+   * spins the pivot about local Y across the dial sweep. Build-time only.
+   */
+  private buildGaugeOverlay(device: pc.Entity): void {
+    // Mesh space: the panel lies in the XZ plane facing +Y, so the default cylinder/torus axis (+Y)
+    // already matches the dial normal — no child rotations needed.
+    const overlay = new pc.Entity('gauge-overlay');
+    overlay.setLocalPosition(DEVICE_DIAL.x, DEVICE_DIAL.y, DEVICE_DIAL.z);
+    device.addChild(overlay);
+
+    const face = this.makeMeshEntity(
+      'overlay-face',
+      this.cylinderMesh(DEVICE_DIAL.radius, 0.0015, GAUGE_RADIAL_SEGMENTS),
+      'gaugeFace',
+    );
+    overlay.addChild(face);
+
+    const bezel = this.makeMeshEntity(
+      'overlay-bezel',
+      this.torusMesh(0.0035, DEVICE_DIAL.radius + 0.002, 360, GAUGE_RADIAL_SEGMENTS),
+      'metalTrim',
+    );
+    bezel.setLocalPosition(0, 0.001, 0);
+    overlay.addChild(bezel);
+
+    // The pivot is what the gauge controller rotates (setLocalEulerAngles(0, angle, 0)). The carrier
+    // between overlay and pivot fixes the zero direction + sweep sense so the needle tracks the dial
+    // art (which sweeps clockwise); the values were calibrated against the rendered art.
+    const carrier = new pc.Entity('overlay-needle-carrier');
+    carrier.setLocalPosition(0, 0.003, 0);
+    carrier.setLocalEulerAngles(0, 0, 180);
+    overlay.addChild(carrier);
+    const pivot = new pc.Entity('needle');
+    carrier.addChild(pivot);
+    const needleMesh = this.makeMeshEntity(
+      'overlay-needle-mesh',
+      this.boxMesh(0.0028, 0.0012, DEVICE_DIAL.radius * 0.85),
+      'needle',
+    );
+    // Local −y: the carrier's 180° roll mirrors it back to +y in overlay space (above the face).
+    needleMesh.setLocalPosition(0, -0.0012, DEVICE_DIAL.radius * 0.33);
+    pivot.addChild(needleMesh);
+    this.needle = pivot;
+
+    const hub = this.makeMeshEntity('overlay-hub', this.cylinderMesh(0.005, 0.004, 24), 'metalTrim');
+    hub.setLocalPosition(0, 0.004, 0);
+    overlay.addChild(hub);
   }
 
   /**
@@ -268,6 +399,14 @@ export class BloodPressureCuff {
     }
 
     this.wrapBodyBaseScale.copy(bodyGroup.getLocalScale());
+
+    // Snapshot the band's mesh instances (build-time) so part picking can query its world AABB
+    // without walking the hierarchy per frame.
+    this.bandMeshInstances.length = 0;
+    const renders = bodyGroup.findComponents('render') as pc.RenderComponent[];
+    for (const render of renders) {
+      for (const mi of render.meshInstances ?? []) this.bandMeshInstances.push(mi);
+    }
   }
 
   /**
@@ -601,6 +740,22 @@ export class BloodPressureCuff {
     this.clearChildren();
     this.root.destroy();
   }
+}
+
+/** Union of mesh-instance world AABBs into `out` (reused). Returns null when the list is empty. */
+function unionAabb(instances: readonly pc.MeshInstance[], out: pc.BoundingBox): pc.BoundingBox | null {
+  let initialized = false;
+  for (let i = 0; i < instances.length; i++) {
+    const mi = instances[i];
+    if (!mi) continue;
+    if (!initialized) {
+      out.copy(mi.aabb);
+      initialized = true;
+    } else {
+      out.add(mi.aabb);
+    }
+  }
+  return initialized ? out : null;
 }
 
 /** Match a GLB material/slot name to a known cuff material id. */

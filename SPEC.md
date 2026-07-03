@@ -457,3 +457,26 @@ Runtime (requires WebXR device/browser — **cannot be verified in this environm
   is informational-only and never used as a gate. A placeholder marker ships; real bytes come from the
   Room environment assets. On-device support on Android XR is **pending QA** (their docs don't yet
   list the module). (Renumbered from a duplicate A19 when merging with the scene-polish entries.)
+- **A28.** **Per-part interaction + manual pump/valve + live composite gauge.** (1) The shipped
+  device GLB is **one merged mesh** (gauge, coiled hose, bulb — verified from its primitive table),
+  so "move the bulb/hose/gauge" moves the WHOLE unit (connected by construction; leashed within
+  0.6 m of the cuff, floor-clamped), and the bulb/screen are addressed as **mesh-local pick regions**
+  measured from the GLB bounds. (2) `interaction/partsController.ts` classifies pointer rays
+  (desktop/phone preview) and hand-pinch points into parts: **arm/assembly** (moves everything
+  together), **band** (slides along the upper-arm segment only — clamped so the cuff never leaves
+  the arm; slide does not affect the scored target pose), **device unit** (drag), **bulb press**
+  (pump squeeze), **screen press** (valve cycle). Ray layer keeps whole-assembly grab.
+  (3) The composite gauge previously NEVER moved (the GLB dial is a static baked texture with no
+  needle node): a procedural **live dial + needle overlay** is now mounted on the device panel
+  (mesh-local placement verified against the runtime graph — the render-entity root carries the GLB
+  node's +90° X rotation) and driven by the existing GaugeController; needle sweep sense was
+  calibrated against renders (art-perfect alignment awaits the real gauge art asset — the baked art
+  is mirrored by the cap UVs and its text is illegible at this size regardless). (4) Manual
+  pump/valve piggyback on the SAME inflation owner and surface the SAME phases the training brain
+  already observes (pump→inflating, reserve empty→holding, valve→deflating), so no state-machine or
+  scoring change; the heartbeat bounce is displayed-value-only (TRAINING_LOGIC §7 item 12).
+  (5) The preview orbit camera now also clamps above the floor (a low target + long zoom could put
+  the eye under y=0, where a grazing grid line rendered as a huge dark wedge — root cause of the
+  artifact first seen after the arm-yaw change), and its orbit target is smoothed so assembly drags
+  read as the object moving rather than the world sliding. All per-frame paths stay allocation-free;
+  picking/drag math runs at input-event rate.

@@ -31,7 +31,8 @@ import { GrabController } from '../interaction/grabController';
 import { PlacementController } from '../interaction/placementController';
 import { InspectionController } from '../interaction/inspectionController';
 import { GaugeController } from '../interaction/gaugeController';
-import { InflationController } from '../interaction/inflationController';
+import { InflationController, ValveState } from '../interaction/inflationController';
+import { PartsController } from '../interaction/partsController';
 import { TrainingStepController } from '../interaction/trainingStepController';
 
 import { CuffAnimator } from '../animation/cuffAnimator';
@@ -62,6 +63,8 @@ export class CuffScene {
   private readonly inspection: InspectionController;
   private readonly gauge: GaugeController;
   private readonly inflation: InflationController;
+  private readonly parts: PartsController;
+  private onValveChange: ((state: ValveState) => void) | null = null;
 
   // Animation + training layer (procedural — no baked clips in the GLB).
   private readonly animator: CuffAnimator;
@@ -101,6 +104,11 @@ export class CuffScene {
     this.inspection = new InspectionController(this.cuff, deps.materials, deps.camera);
     this.gauge = new GaugeController(this.cuff);
     this.inflation = new InflationController(this.gauge);
+    this.parts = new PartsController(this.cuff, deps.camera, this.inflation);
+    this.parts.setOnAssemblyDropped(() => this.placement.clampAboveFloor());
+    this.parts.setOnValveChange((state) => {
+      if (this.onValveChange) this.onValveChange(state);
+    });
 
     // Procedural animation + training scaffolding driving the EXISTING cuff (no second cuff).
     this.animator = new CuffAnimator(this.cuff, this.inflation);
@@ -163,6 +171,43 @@ export class CuffScene {
     this.animator.startInflationCycle();
   }
 
+  // --- manual pump / valve / per-part pointer interaction (partsController) ---
+
+  /** One manual bulb squeeze (UI hook; same action as clicking/pinching the bulb). */
+  pumpBulb(): void {
+    this.inflation.pumpSqueeze();
+    if (this.onValveChange) this.onValveChange(this.inflation.valveState);
+  }
+
+  /** Cycle the release valve closed → controlled → open (UI hook). Returns the new state. */
+  cycleValve(): ValveState {
+    const state = this.inflation.cycleValve();
+    if (this.onValveChange) this.onValveChange(state);
+    return state;
+  }
+
+  /** Subscribe to valve-state changes from ANY input path (3D presses, UI, pumping). */
+  setOnValveChange(cb: (state: ValveState) => void): void {
+    this.onValveChange = cb;
+  }
+
+  /**
+   * Desktop/phone pointer interaction (preview inspect mode). Returns true when a part was picked —
+   * the app must then route move/up here and suppress camera orbit for the drag.
+   */
+  pointerDown(screenX: number, screenY: number): boolean {
+    if (this.arActive) return false;
+    return this.parts.pointerDown(screenX, screenY);
+  }
+
+  pointerMove(screenX: number, screenY: number): void {
+    this.parts.pointerMove(screenX, screenY);
+  }
+
+  pointerUp(): void {
+    this.parts.pointerUp();
+  }
+
   // --- training layer hooks (used by the app to wire the training panel) ---
 
   /** Subscribe to training status changes for the UI. */
@@ -209,6 +254,7 @@ export class CuffScene {
     this.hitTest.start();
     this.placement.reset();
     this.grab.reset();
+    this.parts.reset();
     this.inspection.setActive(false);
   }
 
@@ -218,6 +264,7 @@ export class CuffScene {
     this.hitTest.stop();
     this.anchors.clear();
     this.grab.reset();
+    this.parts.reset();
     this.inflation.reset();
     this.training.reset();
     this.inspection.setActive(true);
@@ -234,6 +281,7 @@ export class CuffScene {
     if (layer !== InteractionLayer.PlaceInspect) {
       this.grab.reset();
     }
+    this.parts.reset();
   }
 
   /** Apply quality profile (anisotropy base + any layer effects). */
@@ -269,10 +317,11 @@ export class CuffScene {
         break;
     }
 
-    // Anchor drift correction (if anchored) only while placed and not grabbing.
-    if (!this.grab.isGrabbing) this.placement.syncToAnchor();
+    // Anchor drift correction (if anchored) only while placed and not grabbing/part-dragging.
+    if (!this.grab.isGrabbing && this.parts.part === null) this.placement.syncToAnchor();
 
-    this.inspection.update(this.arActive);
+    this.parts.update(dt); // press-timing clock only
+    this.inspection.update(this.arActive, dt);
 
     // Inflation is ticked ONCE here (single owner). The animator READS its pressure for swell.
     this.inflation.update(dt);
@@ -297,6 +346,11 @@ export class CuffScene {
       active = true;
     }
 
+    // Per-part gestures first (band slide, device move, bulb squeeze, valve press). When the pinch
+    // lands on a specific part, the whole-assembly grab stands down for that gesture; otherwise the
+    // default grab keeps the existing arm/assembly semantics.
+    const partOwned = this.parts.updateFromPoint(active, grabPoint, dt);
+
     // Placement phase until the user first grabs; afterwards grab drives the pose.
     if (!active && !this.grab.isGrabbing) {
       this.placement.update(true);
@@ -304,7 +358,11 @@ export class CuffScene {
       this.placement.update(false);
     }
 
-    this.grab.update(active, grabPoint, dt);
+    if (partOwned) {
+      this.grab.update(false, null, dt);
+    } else {
+      this.grab.update(active, grabPoint, dt);
+    }
 
     // Hover highlight: any tracked fingertip within proximity of the cuff.
     this.updateHoverFromHands(frame);

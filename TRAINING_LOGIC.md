@@ -151,7 +151,18 @@ Each item is also flagged `SME-REVIEW:` at its source. None is asserted as clini
     `alongUpperArm01` of the upper arm with an implied artery-marker orientation. Confirm the correct
     **landmark** (artery marker over the **brachial artery**; lower cuff edge **~2–3 cm above the
     antecubital fossa**) and acceptable placement band. Currently a visual affordance only — placement
-    correctness is still scored against a **captured target pose**, not arm anatomy (see §8).
+    correctness is still scored against a **captured target pose**, not arm anatomy (see §8). The
+    band is also **runtime-slidable** along the upper-arm segment (drag), which does not change the
+    scored target pose.
+12. **Manual pump / valve / heartbeat cue** (`PUMP_INTERACTION` in `config/trainingConfig.ts`;
+    `interaction/inflationController.ts`). The trainee can pump the bulb (each squeeze **+15 mmHg**,
+    plausible but not device-measured), and work a 3-state release valve (**closed → controlled →
+    open**; controlled reuses `controlledDeflateMmHgPerSec`, full-open dumps at **40 mmHg/s**, an
+    interaction affordance). While pressure falls between the demo **systolic (120)** and
+    **diastolic (80)** markers, the gauge needle bounces with a simulated pulse (**72 bpm, ±3 mmHg**
+    displayed amplitude) as an oscillometric teaching cue — the appearance/disappearance window, the
+    pulse rate, and the amplitude are all illustrative claims to confirm. The bounce is
+    **presentation-only**: it never feeds the pressure value used by observations/validation.
 
 > Recommended sources for the SME to validate against: current **AHA/ACC blood-pressure measurement
 > guidance**, **AAMI/ISO 81060** cuff sizing, and the **manufacturer IFU** for the specific cuff.

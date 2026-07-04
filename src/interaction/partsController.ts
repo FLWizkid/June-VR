@@ -43,6 +43,8 @@ export const enum CuffPart {
   Bulb = 'bulb',
   Screen = 'screen',
   Stethoscope = 'stethoscope',
+  /** The stethoscope's round chest piece — moves on its own; the tube bends to follow. */
+  StethChest = 'steth-chest',
 }
 
 /** Press vs drag classification: shorter+stiller than this is a press. */
@@ -97,6 +99,7 @@ export class PartsController {
   /** Optional stethoscope prop (mounted under the cuff root by the training scene). */
   private steth: Stethoscope | null = null;
   private readonly startStethLocal = new pc.Vec3();
+  private readonly startChestLocal = new pc.Vec3();
   /** True when the current gesture came from the hand path (point-driven, no ray). */
   private handGesture = false;
 
@@ -207,7 +210,10 @@ export class PartsController {
     this.startRotation = this.cuff.wrapRotation;
     const device = this.cuff.deviceEntity;
     if (device) this.startDeviceLocal.copy(device.getLocalPosition());
-    if (this.steth) this.startStethLocal.copy(this.steth.root.getLocalPosition());
+    if (this.steth) {
+      this.startStethLocal.copy(this.steth.root.getLocalPosition());
+      this.startChestLocal.copy(this.steth.chestLocalPosition);
+    }
   }
 
   private applyDrag(point: pc.Vec3): void {
@@ -231,6 +237,9 @@ export class PartsController {
         break;
       case CuffPart.Stethoscope:
         this.dragStethoscope(point);
+        break;
+      case CuffPart.StethChest:
+        this.dragStethChest(point);
         break;
       default:
         break; // bulb/screen press candidates don't move anything until reclassified
@@ -358,6 +367,27 @@ export class PartsController {
     this.cuff.invalidateAabb();
   }
 
+  /**
+   * Stethoscope CHEST PIECE (round end): move it on its own — the flexible tube bends to follow, and
+   * it can be placed anywhere (e.g. onto the arm). Position is in the stethoscope-root's local space;
+   * we convert the drag delta from world into that space. Leashed so it stays within tube reach.
+   */
+  private dragStethChest(point: pc.Vec3): void {
+    const steth = this.steth;
+    if (!steth) return;
+    tmp.vecA.sub2(point, this.startPoint); // world delta
+    // Into stethoscope-root local space (root is under the cuff root; use its world rotation).
+    tmp.quatA.copy(steth.root.getRotation()).invert();
+    tmp.quatA.transformVector(tmp.vecA, tmp.vecB);
+    tmp.vecC.add2(this.startChestLocal, tmp.vecB);
+    // Leash to a plausible tube reach from the head.
+    const reach = 0.4;
+    const d = tmp.vecC.length();
+    if (d > reach) tmp.vecC.mulScalar(reach / d);
+    steth.setChestLocalPosition(tmp.vecC.x, tmp.vecC.y, tmp.vecC.z);
+    this.cuff.invalidateAabb();
+  }
+
   // ------------------------------------------------------------------ picking
 
   /** Build a world ray through the screen point. False if no camera component. */
@@ -387,6 +417,9 @@ export class PartsController {
     // The connecting hose is grabbable and drags the device unit (it is plumbed into it).
     const hoseBox = this.cuff.hoseWorldAabb();
     if (hoseBox && hoseBox.intersectsRay(this.ray, this.hitPoint)) return CuffPart.Device;
+    // Chest piece (round end) first — it's the small grab target that bends the tube.
+    const chestBox = this.steth?.chestWorldAabb() ?? null;
+    if (chestBox && chestBox.intersectsRay(this.ray, this.hitPoint)) return CuffPart.StethChest;
     const stethBox = this.steth?.worldAabb() ?? null;
     if (stethBox && stethBox.intersectsRay(this.ray, this.hitPoint)) return CuffPart.Stethoscope;
     const whole = this.cuff.worldAabb();
@@ -452,6 +485,8 @@ export class PartsController {
     if (deviceBox && containsWithMargin(deviceBox, point, 0.02)) return CuffPart.Device;
     const hoseBox = this.cuff.hoseWorldAabb();
     if (hoseBox && containsWithMargin(hoseBox, point, 0.02)) return CuffPart.Device;
+    const chestBox = this.steth?.chestWorldAabb() ?? null;
+    if (chestBox && containsWithMargin(chestBox, point, 0.02)) return CuffPart.StethChest;
     const stethBox = this.steth?.worldAabb() ?? null;
     if (stethBox && containsWithMargin(stethBox, point, 0.02)) return CuffPart.Stethoscope;
     return null; // assembly / empty space → default whole grab

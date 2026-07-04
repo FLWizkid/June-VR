@@ -538,3 +538,34 @@ Runtime (requires WebXR device/browser — **cannot be verified in this environm
   so tick/marker geometry is left in canvas space (keeping the needle calibration valid) and only the
   TEXT is pre-flipped per-label (`scale(1,-1)`) so it reads upright on the gauge. Cosmetic; the dial
   is procedural placeholder art behind the `gaugeFace` texture seam until real gauge art is supplied.
+- **A33.** **Dial text upright; coil tube culled; bendable stethoscope; bulb squeezes with the pump.**
+  (Owner request; four scene-polish changes in one batch.) All cosmetic/interaction; the engine-free
+  training brain and `config/trainingConfig.ts` clinical values are untouched.
+  1. **Dial text upright.** A32's `scale(1,-1)` per-label pre-flip still rendered the numbers
+     upside-down on-device. A four-way on-gauge test pattern established the cap transform is a pure
+     **180° rotation** (not a vertical mirror), so each label is now drawn with a per-label
+     `ctx.rotate(π)` (`uprightText` in `materials/textureSets.ts`) — numbers and "mmHg" read upright.
+     Tick/marker geometry is still left in canvas space, preserving the needle calibration by
+     construction. Re-verified in headless renders.
+  2. **Hanging coil tube removed.** The device GLB's `Plastic_Grey` primitive contained a decorative
+     coil that hangs from the gauge and loops back to it (distinct from the cuff→gauge hose and the
+     bulb→gauge tube, which are retained). At load, `bloodPressureCuff.ts cullDeviceCoil` removes only
+     the coil's triangles via a runtime index-buffer edit bounded to a 2D mesh-local box
+     (`x < 0.04 ∧ z > −0.26`, isolated by vertex-density analysis so the bulb tube at x≈0.05–0.09 is
+     kept). The GLB file itself is unchanged (reversible, in-memory); owner explicitly authorized the
+     edit. Licensed-mesh node structure (§7.7) is preserved — no mesh is merged, renamed, or collapsed.
+  3. **Bendable stethoscope with a movable round end.** `entities/stethoscope.ts` now has a fixed head
+     (binaural fork + earpieces) and a **movable chest piece**; a 20-segment flexible tube is re-laid
+     along a sagging quadratic bezier (transform-only, allocation-free, event-rate) whenever the chest
+     moves. A new `CuffPart.StethChest` is picked before the whole-instrument AABB, so grabbing the
+     round end drags it alone (leashed to 0.4 m of tube reach) and the tube bends to follow; grabbing
+     the head still moves the whole instrument. Verified end-to-end headless: dragging the projected
+     chest point moved the chest local pos while the root stayed fixed, and the tube re-bent.
+  4. **Bulb squeezes with the pump (supersedes A31's bulb-expand).** Per owner, the bulb should
+     CONSTRICT on each pump and relax on release — mirroring a real sphygmomanometer — **independent**
+     of the cuff's pumped size. The baked bulb is hidden (`hideBakedBulb`) and the procedural overlay
+     is driven by a squeeze envelope, not the pressure fraction: `inflationController` exposes
+     `bulbSqueeze` (eased from the pump reserve), `cuffAnimator` feeds it to `cuff.setBulbSqueeze` in
+     the same tick it feeds bladder swell from pressure — so cuff and bulb always act together, driven
+     by the one pump action (single inflation owner preserved). Verified headless: bulb narrows
+     mid-pump and returns to rest on release. No-op in full-procedural fallback (no device GLB).

@@ -75,17 +75,19 @@ export const DEVICE_SCREEN_REGION = {
 } as const;
 
 /**
- * Animated bulb overlay (composite mode). The shipped device GLB is one merged mesh, so the artist's
- * blue bulb (the `Platic_Grey_2` primitive) cannot be transformed on its own. We overlay a
- * procedural ellipsoid on top of it, sized to ENVELOPE the baked bulb at rest so the static one is
- * hidden, and scale it with the live pressure — it expands as the trainee pumps up and contracts as
- * the pressure is released. Center + rest radii are mesh-local, from the baked bulb's vertex bounds
- * (center ≈ (0.0785,−0.0075,−0.0485); half-extents ≈ (0.025,0.025,0.049)). Colour matches the baked
- * bulb's base factor. Cosmetic; finalized on-device.
+ * Animated bulb (composite mode). Owner-authorized model edit: the artist's baked blue bulb
+ * (`Platic_Grey_2`) is HIDDEN (meshInstance.visible = false) and REPLACED by a procedural ellipsoid,
+ * so the bulb can freely CONSTRICT when squeezed and re-expand on release without the static one
+ * poking through. Center + rest radii are mesh-local, matching the baked bulb's vertex bounds
+ * (center ≈ (0.0785,−0.0075,−0.0485); half-extents ≈ (0.0245,0.0245,0.0485)). Colour matches the
+ * baked bulb's base factor. Cosmetic; finalized on-device.
  */
+const DEVICE_BULB_MATERIAL = 'Platic_Grey_2'; // note: the GLB spells it "Platic"
 const BULB_OVERLAY_CENTER = { x: 0.0785, y: -0.0075, z: -0.0485 } as const;
-const BULB_OVERLAY_REST_RADII = { x: 0.03, y: 0.03, z: 0.057 } as const;
-const BULB_OVERLAY_MAX_GROWTH = 0.26; // +26% at full inflation
+const BULB_OVERLAY_REST_RADII = { x: 0.0255, y: 0.0255, z: 0.05 } as const;
+/** Max constriction when the bulb is fully squeezed (radial + length compression fractions). */
+const BULB_SQUEEZE_MAX = 0.42;
+const BULB_SQUEEZE_LENGTH = 0.16;
 const BULB_OVERLAY_COLOR = { r: 0.0, g: 0.075, b: 0.314 } as const;
 
 /**
@@ -101,6 +103,18 @@ const HOSE_COIL_TURNS = 8;
 const HOSE_COIL_RADIUS = 0.009;
 const HOSE_TUBE_RADIUS = 0.0045;
 const HOSE_DEVICE_PORT_MESH = { x: -0.055, y: -0.01, z: -0.25 } as const;
+
+/**
+ * Owner request (authorized model edit): remove the artist's DECORATIVE coiled tube that hangs from
+ * the gauge and loops back to it — WITHOUT touching the tube to the bulb. Both are the grey
+ * `Plastic_Grey` material in the merged GLB. From the vertex-density map, the hanging U-coil's two
+ * legs sit at mesh-local x < 0.04 within the hanging region BELOW the gauge (world-y < 0.26, i.e.
+ * mesh z > −0.26), while the bulb tube runs at x ≈ 0.05–0.09 there. So we cull the `Plastic_Grey`
+ * triangles whose centroid falls in that box at LOAD time (a runtime index-buffer edit — the GLB
+ * file is left intact, and the cull is reversible by removing this call).
+ */
+const DEVICE_COIL_MATERIAL = 'Plastic_Grey';
+const DEVICE_COIL_CUT = { maxX: 0.04, minZ: -0.26 } as const;
 
 export class BloodPressureCuff {
   /** Root entity; parent this under the world/anchor root. */
@@ -490,6 +504,11 @@ export class BloodPressureCuff {
       }
     }
 
+    // Remove the artist's decorative hanging coil, and hide the baked bulb (owner-authorized): the
+    // procedural bulb below replaces it so it can constrict when squeezed.
+    this.cullDeviceCoil(renders);
+    this.hideBakedBulb(renders);
+
     // The shipped GLB is one merged mesh (no tagged needle node), so a live procedural dial +
     // needle is overlaid on its screen panel instead — see buildGaugeOverlay.
     this.deviceEntityRef = entity;
@@ -503,9 +522,51 @@ export class BloodPressureCuff {
   }
 
   /**
-   * Procedural bulb ellipsoid overlaid on the device's baked bulb (see BULB_OVERLAY_* constants).
-   * Built once at rest size (envelopes the static bulb); `setBulbInflation` scales it each time the
-   * pressure changes. Build-time only.
+   * Drop the decorative hanging coil from the loaded device by rebuilding the `Plastic_Grey` mesh's
+   * index buffer without the triangles whose centroid is left of `DEVICE_COIL_CUT_X` (mesh-local).
+   * The bulb tube (same material, x ≈ 0.08) is kept. Runtime-only — the GLB file is untouched.
+   */
+  private cullDeviceCoil(renders: pc.RenderComponent[]): void {
+    for (const render of renders) {
+      for (const mi of render.meshInstances ?? []) {
+        if ((mi.material?.name ?? '') !== DEVICE_COIL_MATERIAL) continue;
+        const mesh = mi.mesh;
+        const vcount = mesh.vertexBuffer.getNumVertices();
+        const positions = new Float32Array(vcount * 3);
+        mesh.getPositions(positions);
+        const indices: number[] = [];
+        mesh.getIndices(indices);
+        const kept: number[] = [];
+        for (let t = 0; t + 2 < indices.length; t += 3) {
+          const a = indices[t] ?? 0;
+          const b = indices[t + 1] ?? 0;
+          const c = indices[t + 2] ?? 0;
+          const cx = ((positions[a * 3] ?? 0) + (positions[b * 3] ?? 0) + (positions[c * 3] ?? 0)) / 3;
+          const cz = ((positions[a * 3 + 2] ?? 0) + (positions[b * 3 + 2] ?? 0) + (positions[c * 3 + 2] ?? 0)) / 3;
+          // Drop the hanging-coil box (left of maxX AND below the gauge); keep everything else.
+          const inCoil = cx < DEVICE_COIL_CUT.maxX && cz > DEVICE_COIL_CUT.minZ;
+          if (!inCoil) kept.push(a, b, c);
+        }
+        if (kept.length !== indices.length) {
+          mesh.setIndices(kept);
+          mesh.update();
+        }
+      }
+    }
+  }
+
+  /** Hide the GLB's baked bulb primitive so the procedural (animatable) bulb replaces it. */
+  private hideBakedBulb(renders: pc.RenderComponent[]): void {
+    for (const render of renders) {
+      for (const mi of render.meshInstances ?? []) {
+        if ((mi.material?.name ?? '') === DEVICE_BULB_MATERIAL) mi.visible = false;
+      }
+    }
+  }
+
+  /**
+   * Procedural bulb ellipsoid that REPLACES the device's (hidden) baked bulb (see BULB_* constants).
+   * Built once at rest size; `setBulbSqueeze` constricts it as it is pumped. Build-time only.
    */
   private buildBulbOverlay(device: pc.Entity): void {
     const mat = createBulbMaterial();
@@ -519,20 +580,23 @@ export class BloodPressureCuff {
   }
 
   /**
-   * Scale the bulb overlay with the live inflation fraction [0,1]: it EXPANDS as the cuff is pumped
-   * up and CONTRACTS as pressure is released. Rest radii envelope the baked bulb, so it only ever
-   * grows from there (the static bulb stays hidden). Allocation-free; reuses a scratch. No-op in
+   * Squeeze the bulb: `squeeze` in [0,1] (0 = relaxed/full, 1 = fully constricted). The bulb
+   * CONSTRICTS as it is pumped and re-expands on release — mirroring the real pumping action, and
+   * INDEPENDENT of how far the cuff has been pumped up (the cuff swell is driven separately from
+   * pressure, so the two animate together during a pump). Compresses mostly radially (a hand squeeze)
+   * with a little lengthening, so volume reads as displaced into the cuff. Allocation-free. No-op in
    * full-procedural mode (no device GLB).
    */
-  setBulbInflation(fraction: number): void {
+  setBulbSqueeze(squeeze: number): void {
     const bulb = this.bulbNode;
     if (!bulb) return;
-    const f = fraction < 0 ? 0 : fraction > 1 ? 1 : fraction;
-    const s = 1 + BULB_OVERLAY_MAX_GROWTH * f;
+    const s = squeeze < 0 ? 0 : squeeze > 1 ? 1 : squeeze;
+    const radial = 1 - BULB_SQUEEZE_MAX * s; // cross-section pinches in (a hand squeeze)
+    const along = 1 - BULB_SQUEEZE_LENGTH * s; // and shortens a little — overall clearly smaller
     bulb.setLocalScale(
-      BULB_OVERLAY_REST_RADII.x * s,
-      BULB_OVERLAY_REST_RADII.y * s,
-      BULB_OVERLAY_REST_RADII.z * s,
+      BULB_OVERLAY_REST_RADII.x * radial,
+      BULB_OVERLAY_REST_RADII.y * radial,
+      BULB_OVERLAY_REST_RADII.z * along,
     );
     this.aabbDirty = true;
   }

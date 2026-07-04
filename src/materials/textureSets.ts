@@ -248,27 +248,29 @@ export class TextureSetProvider {
       ctx.stroke();
     }
 
-    // Numeric labels at each major tick (every 20 mmHg). Each is drawn pre-flipped vertically so the
-    // cap's vertical mirror lands it upright and readable, at its tick position.
+    // Numeric labels at each major tick (every 20 mmHg). The dial art lands 180°-ROTATED on the GLB
+    // gauge cap (verified with a test pattern: only a per-label `rotate(π)` reads forward-upright),
+    // so each label is drawn pre-rotated 180° — it lands upright and readable at its tick position.
+    // The tick/marker geometry is left untouched (its placement is already correct on the gauge).
     ctx.fillStyle = '#1a1c1f';
     ctx.font = 'bold 15px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    const flippedText = (text: string, x: number, y: number): void => {
+    const uprightText = (text: string, x: number, y: number): void => {
       ctx.save();
       ctx.translate(x, y);
-      ctx.scale(1, -1);
+      ctx.rotate(Math.PI);
       ctx.fillText(text, 0, 0);
       ctx.restore();
     };
     for (let v = 0; v <= 300; v += 20) {
       const a = dialAngle(v);
-      flippedText(String(v), Math.cos(a) * 70, Math.sin(a) * 70);
+      uprightText(String(v), Math.cos(a) * 70, Math.sin(a) * 70);
     }
 
-    // Units label (also pre-flipped so it reads "mmHg" on the gauge).
+    // Units label (also pre-rotated so it reads "mmHg" upright on the gauge).
     ctx.font = 'bold 16px system-ui, sans-serif';
-    flippedText('mmHg', 0, 44);
+    uprightText('mmHg', 0, 44);
     return this.makeTexture(canvas, true);
   }
 

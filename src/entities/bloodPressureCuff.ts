@@ -568,16 +568,17 @@ export class BloodPressureCuff {
 
     // The pivot is what the gauge controller rotates (setLocalEulerAngles(0, angle, 0)). Two fixed
     // frames between overlay and pivot align the needle with the dial art AS RENDERED: the art
-    // canvas lands mirrored on the cylinder cap, giving a screen-angle law φ(v) = 315° − 0.9°·v
-    // (measured from the red danger arc's rendered position). The 180° roll flips the pivot's sweep
-    // to match the art's clockwise sense, and the +90° trim aligns the zero tick; together:
-    // φ_needle = 270 − (θ + 90) = 315 − 0.9·v = φ_art for the controller's θ(v) = −135 + 0.9·v.
+    // canvas lands mirrored on the cylinder cap. The 180° roll flips the pivot's sweep to match the
+    // art's clockwise sense; the trim yaw aligns the zero tick. The dial face carries a +180° art
+    // rotation (owner request; see textureSets.dialTexture), so the trim yaw carries the matching
+    // +180° (90° → 270°) — the needle still lands on the correct number. Verified against renders at
+    // 0 and 120 mmHg (needle on the "120"/systolic marker).
     const carrier = new pc.Entity('overlay-needle-carrier');
     carrier.setLocalPosition(0, 0.003, 0);
     carrier.setLocalEulerAngles(0, 0, 180);
     overlay.addChild(carrier);
     const trim = new pc.Entity('overlay-needle-trim');
-    trim.setLocalEulerAngles(0, 90, 0);
+    trim.setLocalEulerAngles(0, 270, 0);
     carrier.addChild(trim);
     const pivot = new pc.Entity('needle');
     trim.addChild(pivot);

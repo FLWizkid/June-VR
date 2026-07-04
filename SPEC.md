@@ -528,3 +528,13 @@ Runtime (requires WebXR device/browser — **cannot be verified in this environm
   same eased pressure→swell value that feeds the bladder, so bulb and band inflate together. Verified
   in the headless render: bulb silhouette rest→pumped +54% area, contracting back on release. No-op
   in full-procedural fallback (no device GLB). Cosmetic; build-time geometry, event-rate scale.
+- **A32.** **Gauge face rotated 180° + numeric labels.** (Owner request.) The procedural dial art
+  (`materials/textureSets.ts dialTexture`) is rotated 180° (`dialAngle += π`) and the live-needle
+  overlay carries the matching +180° (needle-trim yaw 90°→270°), so the needle still lands on the
+  correct value — a matched rotation preserves the earlier needle↔art calibration by construction
+  (re-verified in renders at 0/120/240 mmHg). Numeric labels are drawn at every major tick (0…300 by
+  20) plus the "mmHg" units. The dial art lands VERTICALLY MIRRORED on the GLB gauge cap (established
+  with a test pattern: an `scale(-1,1)` pre-flip produced a pure 180° result ⇒ cap = `scale(1,-1)`),
+  so tick/marker geometry is left in canvas space (keeping the needle calibration valid) and only the
+  TEXT is pre-flipped per-label (`scale(1,-1)`) so it reads upright on the gauge. Cosmetic; the dial
+  is procedural placeholder art behind the `gaugeFace` texture seam until real gauge art is supplied.

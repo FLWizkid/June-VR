@@ -75,6 +75,20 @@ export const DEVICE_SCREEN_REGION = {
 } as const;
 
 /**
+ * Animated bulb overlay (composite mode). The shipped device GLB is one merged mesh, so the artist's
+ * blue bulb (the `Platic_Grey_2` primitive) cannot be transformed on its own. We overlay a
+ * procedural ellipsoid on top of it, sized to ENVELOPE the baked bulb at rest so the static one is
+ * hidden, and scale it with the live pressure — it expands as the trainee pumps up and contracts as
+ * the pressure is released. Center + rest radii are mesh-local, from the baked bulb's vertex bounds
+ * (center ≈ (0.0785,−0.0075,−0.0485); half-extents ≈ (0.025,0.025,0.049)). Colour matches the baked
+ * bulb's base factor. Cosmetic; finalized on-device.
+ */
+const BULB_OVERLAY_CENTER = { x: 0.0785, y: -0.0075, z: -0.0485 } as const;
+const BULB_OVERLAY_REST_RADII = { x: 0.03, y: 0.03, z: 0.057 } as const;
+const BULB_OVERLAY_MAX_GROWTH = 0.26; // +26% at full inflation
+const BULB_OVERLAY_COLOR = { r: 0.0, g: 0.075, b: 0.314 } as const;
+
+/**
  * Procedural coiled hose connecting the CUFF BAND to the GAUGE DEVICE (composite mode) — the
  * counterpart of the GLB's baked bulb coil, so the cuff visibly plumbs into the meter. Geometry is
  * a stretched helix between two ports; segment TRANSFORMS (never geometry) are recomputed whenever
@@ -131,6 +145,8 @@ export class BloodPressureCuff {
 
   /** The instantiated device GLB entity (composite mode), for per-part interaction. Null until built. */
   private deviceEntityRef: pc.Entity | null = null;
+  /** Procedural bulb overlay node scaled by live pressure (composite mode). Null until built. */
+  private bulbNode: pc.Entity | null = null;
   /** Mesh instances of the fabric band (wrap body subtree) / device, for part AABBs. Build-time. */
   private readonly bandMeshInstances: pc.MeshInstance[] = [];
   private readonly deviceMeshInstances: pc.MeshInstance[] = [];
@@ -210,6 +226,7 @@ export class BloodPressureCuff {
     this.hoseSegments.length = 0;
     this.hoseRoot = null;
     this.deviceEntityRef = null;
+    this.bulbNode = null;
     this.wrapSlideY = 0;
     this.wrapRotDeg = 0;
     this.needle = null;
@@ -481,7 +498,43 @@ export class BloodPressureCuff {
       for (const mi of render.meshInstances ?? []) this.deviceMeshInstances.push(mi);
     }
     this.buildGaugeOverlay(entity);
+    this.buildBulbOverlay(entity);
     return true;
+  }
+
+  /**
+   * Procedural bulb ellipsoid overlaid on the device's baked bulb (see BULB_OVERLAY_* constants).
+   * Built once at rest size (envelopes the static bulb); `setBulbInflation` scales it each time the
+   * pressure changes. Build-time only.
+   */
+  private buildBulbOverlay(device: pc.Entity): void {
+    const mat = createBulbMaterial();
+    const sphere = pc.createSphere(this.device, { radius: 1, latitudeBands: 24, longitudeBands: 24 });
+    const bulb = new pc.Entity('bulb-overlay');
+    bulb.addComponent('render', { meshInstances: [new pc.MeshInstance(sphere, mat)] });
+    bulb.setLocalPosition(BULB_OVERLAY_CENTER.x, BULB_OVERLAY_CENTER.y, BULB_OVERLAY_CENTER.z);
+    bulb.setLocalScale(BULB_OVERLAY_REST_RADII.x, BULB_OVERLAY_REST_RADII.y, BULB_OVERLAY_REST_RADII.z);
+    device.addChild(bulb);
+    this.bulbNode = bulb;
+  }
+
+  /**
+   * Scale the bulb overlay with the live inflation fraction [0,1]: it EXPANDS as the cuff is pumped
+   * up and CONTRACTS as pressure is released. Rest radii envelope the baked bulb, so it only ever
+   * grows from there (the static bulb stays hidden). Allocation-free; reuses a scratch. No-op in
+   * full-procedural mode (no device GLB).
+   */
+  setBulbInflation(fraction: number): void {
+    const bulb = this.bulbNode;
+    if (!bulb) return;
+    const f = fraction < 0 ? 0 : fraction > 1 ? 1 : fraction;
+    const s = 1 + BULB_OVERLAY_MAX_GROWTH * f;
+    bulb.setLocalScale(
+      BULB_OVERLAY_REST_RADII.x * s,
+      BULB_OVERLAY_REST_RADII.y * s,
+      BULB_OVERLAY_REST_RADII.z * s,
+    );
+    this.aabbDirty = true;
   }
 
   /**
@@ -935,6 +988,18 @@ export class BloodPressureCuff {
     this.clearChildren();
     this.root.destroy();
   }
+}
+
+/** Blue rubber material for the procedural bulb overlay (matches the baked bulb's base colour). */
+function createBulbMaterial(): pc.StandardMaterial {
+  const m = new pc.StandardMaterial();
+  m.diffuse.set(BULB_OVERLAY_COLOR.r, BULB_OVERLAY_COLOR.g, BULB_OVERLAY_COLOR.b);
+  m.metalness = 0;
+  m.useMetalness = true;
+  m.gloss = 0.35;
+  m.name = 'cuff:bulb-overlay';
+  m.update();
+  return m;
 }
 
 /** Union of mesh-instance world AABBs into `out` (reused). Returns null when the list is empty. */

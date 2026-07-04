@@ -518,3 +518,13 @@ Runtime (requires WebXR device/browser — **cannot be verified in this environm
   re-mounts both around the rebuild, re-aligns the arm, re-runs the floor clamp — and re-applies the
   orient offset if the learner is mid-orient (a rebuild zeroes band rotation, which would silently
   pass the step). All new geometry is build-time; drags/relays stay event-rate and allocation-free.
+- **A31.** **Torso/furniture removed; bulb animates with pressure.** The patient torso (A30) and the
+  exam-room furniture (A30) were removed at owner request. The inflation bulb now EXPANDS as the
+  cuff is pumped up and CONTRACTS as pressure is released: since the shipped device GLB is one merged
+  mesh (the artist's bulb is the `Platic_Grey_2` primitive and can't be transformed alone), a
+  procedural blue ellipsoid — mesh-local, sized from the baked bulb's vertex bounds and coloured to
+  its base factor `[0, 0.075, 0.314]` — is overlaid to ENVELOPE the static bulb (hiding it) and
+  scaled by the live inflation fraction (rest radii + up to +26%). The animator drives it from the
+  same eased pressure→swell value that feeds the bladder, so bulb and band inflate together. Verified
+  in the headless render: bulb silhouette rest→pumped +54% area, contracting back on release. No-op
+  in full-procedural fallback (no device GLB). Cosmetic; build-time geometry, event-rate scale.

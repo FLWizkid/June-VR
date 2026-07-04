@@ -196,10 +196,16 @@ export class TextureSetProvider {
     const ctx = newCanvas(256);
     if (!ctx) return null;
     const { canvas } = ctx;
-    const dialAngle = (v: number): number => -Math.PI * 0.75 + (v / 300) * Math.PI * 1.5;
+    // Dial sweep 0..300 mmHg over 270°. The `+ Math.PI` rotates the whole face 180° (owner request);
+    // the needle overlay carries the matching 180° offset so it still points at the right number.
+    const dialAngle = (v: number): number => -Math.PI * 0.75 + (v / 300) * Math.PI * 1.5 + Math.PI;
     ctx.fillStyle = '#f4f4f0';
     ctx.fillRect(0, 0, 256, 256);
     ctx.translate(128, 128);
+    // NOTE on orientation: the dial art lands VERTICALLY MIRRORED on the GLB gauge cap (verified with
+    // a test pattern). The tick/marker GEOMETRY is left in canvas space so the needle overlay's fixed
+    // calibration keeps holding; only the TEXT is drawn pre-flipped (per-label `scale(1,-1)`) so it
+    // reads upright on the gauge despite the cap's flip.
     ctx.strokeStyle = '#1a1c1f';
     ctx.fillStyle = '#1a1c1f';
     ctx.lineWidth = 2;
@@ -241,9 +247,28 @@ export class TextureSetProvider {
       ctx.lineWidth = major ? 2 : 1;
       ctx.stroke();
     }
-    ctx.font = 'bold 18px system-ui, sans-serif';
+
+    // Numeric labels at each major tick (every 20 mmHg). Each is drawn pre-flipped vertically so the
+    // cap's vertical mirror lands it upright and readable, at its tick position.
+    ctx.fillStyle = '#1a1c1f';
+    ctx.font = 'bold 15px system-ui, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('mmHg', 0, 60);
+    ctx.textBaseline = 'middle';
+    const flippedText = (text: string, x: number, y: number): void => {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(1, -1);
+      ctx.fillText(text, 0, 0);
+      ctx.restore();
+    };
+    for (let v = 0; v <= 300; v += 20) {
+      const a = dialAngle(v);
+      flippedText(String(v), Math.cos(a) * 70, Math.sin(a) * 70);
+    }
+
+    // Units label (also pre-flipped so it reads "mmHg" on the gauge).
+    ctx.font = 'bold 16px system-ui, sans-serif';
+    flippedText('mmHg', 0, 44);
     return this.makeTexture(canvas, true);
   }
 

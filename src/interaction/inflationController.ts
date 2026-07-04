@@ -57,6 +57,12 @@ export class InflationController {
   private valve: ValveState = ValveState.Closed;
   /** Accumulated time base for the deterministic heartbeat bounce (presentation only). */
   private pulseClock = 0;
+  /**
+   * Eased bulb-squeeze amount [0,1] for the VISUAL bulb (0 = relaxed/full, 1 = constricted). Rises
+   * while air is still being pushed from the bulb into the cuff (reserve pending) and eases back as
+   * the reserve drains — so each pump reads as a constrict → release, independent of cuff pressure.
+   */
+  private bulbSqueezeEnv = 0;
 
   constructor(gauge: GaugeController) {
     this.gauge = gauge;
@@ -72,6 +78,11 @@ export class InflationController {
 
   get valveState(): ValveState {
     return this.valve;
+  }
+
+  /** Visual bulb-squeeze amount [0,1] (0 = relaxed/full, 1 = constricted). Presentation only. */
+  get bulbSqueeze(): number {
+    return this.bulbSqueezeEnv;
   }
 
   /** Begin a scripted inflate→hold→deflate demo cycle to the typical target. */
@@ -120,6 +131,7 @@ export class InflationController {
     this.pumpReserve = 0;
     this.valve = ValveState.Closed;
     this.pulseClock = 0;
+    this.bulbSqueezeEnv = 0;
     this.gauge.set(0);
   }
 
@@ -171,6 +183,13 @@ export class InflationController {
     }
 
     this.pressure = clamp(this.pressure, PRESSURE_MMHG.min, PRESSURE_MMHG.max);
+
+    // Bulb squeeze envelope: constricted while a squeeze's air is still flowing into the cuff
+    // (reserve pending), relaxing as it drains. Fast attack so a pump reads crisply; deterministic.
+    const squeezeTarget = clamp(this.pumpReserve / PUMP_INTERACTION.squeezeMmHg, 0, 1);
+    const rate = 1 - Math.exp(-dt * 14);
+    this.bulbSqueezeEnv += (squeezeTarget - this.bulbSqueezeEnv) * rate;
+
     this.gauge.update(this.pressure + this.pulseOffset(dt), dt);
   }
 

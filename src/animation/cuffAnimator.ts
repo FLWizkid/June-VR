@@ -149,12 +149,16 @@ export class CuffAnimator {
     wrap.setLocalPosition(x, y, z);
   }
 
-  /** Map live pressure to bladder swell AND the bulb overlay on the existing cuff entity. */
+  /**
+   * Cuff bladder swells with live pressure; the bulb CONSTRICTS with the live squeeze action. Both
+   * respond to pumping, so they animate together in sync — the cuff firms up a step and the bulb
+   * pinches in on each squeeze, then the bulb relaxes on release while the cuff holds. The bulb
+   * squeeze is independent of how far the cuff is pumped (a hand squeeze, not a pressure readout).
+   */
   private applyBladderFromPressure(): void {
     const swell = easedRemap(this.pressureMmHg, 0, PRESSURE_MMHG.typicalInflate, 0, 1);
     this.cuff.setBladderSwell(swell);
-    // The bulb expands as the cuff is pumped up and contracts as pressure is released.
-    this.cuff.setBulbInflation(swell);
+    this.cuff.setBulbSqueeze(this.inflation.bulbSqueeze);
   }
 
   /**

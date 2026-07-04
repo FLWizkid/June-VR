@@ -174,11 +174,14 @@ Each item is also flagged `SME-REVIEW:` at its source. None is asserted as clini
     artery") — it replaced the earlier captured-reference-pose comparison, which was trivially
     satisfied. SME-REVIEW: the start offset, gesture sensitivity, and the built-alignment-as-correct
     assumption are exercise scaffolding, not validated anatomy.
-15. **Stethoscope + patient torso props** (`entities/stethoscope.ts`, `entities/patientArm.ts`).
-    Presentational stand-ins only: the stethoscope can be grabbed and placed but NO step validates
-    its placement yet (taught site — brachial artery at the antecubital fossa — is a future
-    curriculum item); the gowned torso/head give the limb a patient context and are not
-    anthropometric. SME-REVIEW when a listening/auscultation step is added.
+15. **Stethoscope prop — now bendable, with a movable chest piece** (`entities/stethoscope.ts`).
+    Presentational stand-in only: the head can be grabbed to move the whole instrument, and the round
+    chest piece can be dragged on its own (the flexible tube bends to follow) and placed anywhere,
+    e.g. onto the arm. NO step validates its placement yet — the taught site (brachial artery at the
+    antecubital fossa) is a future curriculum item, and nothing enforces where the chest piece lands.
+    SME-REVIEW when a listening/auscultation step is added and the correct placement is to be scored.
+    (The patient torso prop referenced in earlier revisions was removed at owner request — see
+    SPEC.md A31.)
 16. **Manual pump / valve / heartbeat cue** (`PUMP_INTERACTION` in `config/trainingConfig.ts`;
     `interaction/inflationController.ts`). The trainee can pump the bulb (each squeeze **+15 mmHg**,
     plausible but not device-measured), and work a 3-state release valve (**closed → controlled →

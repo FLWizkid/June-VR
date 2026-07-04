@@ -149,10 +149,12 @@ export class CuffAnimator {
     wrap.setLocalPosition(x, y, z);
   }
 
-  /** Map live pressure to bladder swell on the existing cuff entity. */
+  /** Map live pressure to bladder swell AND the bulb overlay on the existing cuff entity. */
   private applyBladderFromPressure(): void {
     const swell = easedRemap(this.pressureMmHg, 0, PRESSURE_MMHG.typicalInflate, 0, 1);
     this.cuff.setBladderSwell(swell);
+    // The bulb expands as the cuff is pumped up and contracts as pressure is released.
+    this.cuff.setBulbInflation(swell);
   }
 
   /**

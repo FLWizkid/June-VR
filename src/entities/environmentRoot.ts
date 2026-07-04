@@ -129,10 +129,6 @@ export class EnvironmentRoot {
     }
     this.root.addChild(grid);
 
-    // Simple exam-room furniture stand-ins (PREVIEW ONLY — the whole environment root is disabled in
-    // AR, so none of this is ever painted over the real world). Neutral, low-poly, static.
-    this.buildFurniture();
-
     // Subtle low backdrop wall behind the cuff's default framing (-Z), for depth in preview only.
     const backdrop = new pc.Entity('env-backdrop');
     const backMesh = pc.createPlane(this.device, {
@@ -153,62 +149,6 @@ export class EnvironmentRoot {
     backdrop.setLocalPosition(0, 0.9, -FLOOR_HALF);
     backdrop.setLocalEulerAngles(90, 0, 0);
     this.root.addChild(backdrop);
-  }
-
-  /** Exam table + equipment cart stand-ins for the preview room. Build-time boxes only. */
-  private buildFurniture(): void {
-    const frameMat = createPbrMaterial({
-      diffuse: new pc.Color(0.62, 0.63, 0.65),
-      metalness: 0.6,
-      roughness: 0.5,
-    });
-    const padMat = createPbrMaterial({
-      diffuse: new pc.Color(0.5, 0.62, 0.68),
-      metalness: 0,
-      roughness: 0.9,
-    });
-
-    const box = (
-      name: string,
-      sx: number,
-      sy: number,
-      sz: number,
-      mat: pc.StandardMaterial,
-    ): pc.Entity => {
-      const e = new pc.Entity(name);
-      const mesh = pc.createBox(this.device, { halfExtents: new pc.Vec3(sx / 2, sy / 2, sz / 2) });
-      e.addComponent('render', { meshInstances: [new pc.MeshInstance(mesh, mat)] });
-      return e;
-    };
-
-    // Exam table (back-left): padded top on four legs.
-    const table = new pc.Entity('env-exam-table');
-    table.setLocalPosition(-1.25, 0, -1.25);
-    table.setLocalEulerAngles(0, 20, 0);
-    const top = box('table-top', 0.7, 0.06, 1.9, frameMat);
-    top.setLocalPosition(0, 0.72, 0);
-    table.addChild(top);
-    const pad = box('table-pad', 0.66, 0.05, 1.84, padMat);
-    pad.setLocalPosition(0, 0.775, 0);
-    table.addChild(pad);
-    for (const [lx, lz] of [[-0.3, -0.85], [0.3, -0.85], [-0.3, 0.85], [0.3, 0.85]] as const) {
-      const leg = box('table-leg', 0.05, 0.72, 0.05, frameMat);
-      leg.setLocalPosition(lx, 0.36, lz);
-      table.addChild(leg);
-    }
-    this.root.addChild(table);
-
-    // Equipment cart (right): body + top slab, where instruments would rest.
-    const cart = new pc.Entity('env-cart');
-    cart.setLocalPosition(1.35, 0, -0.9);
-    cart.setLocalEulerAngles(0, -15, 0);
-    const cartBody = box('cart-body', 0.52, 0.7, 0.45, frameMat);
-    cartBody.setLocalPosition(0, 0.4, 0);
-    cart.addChild(cartBody);
-    const cartTop = box('cart-top', 0.58, 0.04, 0.5, padMat);
-    cartTop.setLocalPosition(0, 0.77, 0);
-    cart.addChild(cartTop);
-    this.root.addChild(cart);
   }
 
   /**

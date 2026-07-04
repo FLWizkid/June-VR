@@ -189,13 +189,6 @@ export class PatientArm {
     const shoulder = this.makeSphere('shoulder', ua.radiusTop * 1.02, mat);
     this.limbRoot.addChild(shoulder);
 
-    // Patient torso stand-in: gowned chest + neck + head grafted at the shoulder so the limb reads
-    // as belonging to a patient. Purely presentational (build-time; rides the limb root, so
-    // setVisible hides it with the arm). SME-REVIEW (cosmetic): proportions are plausible-adult,
-    // not anthropometric. Positioned MEDIALLY of the shoulder (limb-local −Z maps to the viewer's
-    // right of the folded arm at the default facing).
-    this.buildTorso(mat);
-
     // Elbow joint: a sphere at the bottom of the upper arm.
     const elbowY = -ua.length;
     const elbow = this.makeSphere('elbow', ua.radiusBottom * 1.05, mat);
@@ -285,37 +278,6 @@ export class PatientArm {
   /** Whether the arm is currently shown. */
   get isVisible(): boolean {
     return this.visible;
-  }
-
-  /** Gowned chest (flattened capsule) + shoulders hint + neck + head. Build-time only. */
-  private buildTorso(skin: pc.StandardMaterial): void {
-    // Hospital-gown blue — matte, desaturated so it reads calm on the additive display.
-    const gown = createPbrMaterial({
-      diffuse: new pc.Color(0.42, 0.52, 0.6),
-      metalness: 0,
-      roughness: 0.92,
-    });
-
-    const torso = new pc.Entity('patient-torso');
-    // Medial of the shoulder and dropped so the shoulder joins the chest's upper corner; nudged
-    // back (limb-local −X = world-behind at the default facing) to clear the gauge device.
-    torso.setLocalPosition(-0.1, -0.14, -0.3);
-    this.limbRoot.addChild(torso);
-
-    const chest = this.makeCapsule('torso-chest', 0.12, 0.42, gown);
-    chest.setLocalScale(0.65, 1, 1.25); // flatten front-back (limb-local X), widen across (Z)
-    torso.addChild(chest);
-
-    const neck = new pc.Entity('patient-neck');
-    const neckMesh = pc.createCylinder(this.device, { radius: 0.04, height: 0.08, capSegments: 24 });
-    neck.addComponent('render', { meshInstances: [new pc.MeshInstance(neckMesh, skin)] });
-    neck.setLocalPosition(0, 0.26, 0);
-    torso.addChild(neck);
-
-    const head = this.makeSphere('patient-head', 0.082, skin);
-    head.setLocalPosition(0, 0.37, 0);
-    head.setLocalScale(0.9, 1.15, 0.95);
-    torso.addChild(head);
   }
 
   // --- helpers (build-time only) ---

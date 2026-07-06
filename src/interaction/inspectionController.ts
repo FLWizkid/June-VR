@@ -58,7 +58,12 @@ export class InspectionController {
 
   /** Zoom by a signed delta (meters); clamped to a safe inspection range. */
   zoom(deltaMeters: number): void {
-    this.distance = clamp(this.distance + deltaMeters, INSPECTION_RANGE_METERS.near * 0.6, 1.2);
+    // Floor the zoom at the 6-inch close-inspection bound (SPEC §6). The previous 0.6× floor let the
+    // preview camera get ~0.09 m from the cuff center — INSIDE the ~0.1 m band ring — so the near wall
+    // fell behind the camera and the collar looked "open" (arm visible between the side walls) even
+    // though it is a closed 360° band. Keeping the camera at ≥6 in keeps it outside the ring, so the
+    // cuff always reads as fully wrapping the arm. (Preview/inspect only; AR uses the headset pose.)
+    this.distance = clamp(this.distance + deltaMeters, INSPECTION_RANGE_METERS.near, 1.2);
   }
 
   /** Smoothed orbit target: eases toward the cuff so part-drags read as the OBJECT moving. */

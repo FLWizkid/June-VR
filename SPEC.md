@@ -595,3 +595,16 @@ Runtime (requires WebXR device/browser — **cannot be verified in this environm
   extent 0.183 m (open) → 0.174 (mid) → 0.155 (snug), still monotonic, axial width preserved; confirm-fit
   still enters TOO-TIGHT and is satisfied by loosening (`ix-fit`), and pump/valve (`ix-full`) unaffected.
   On-device AR framing still pending.
+- **A35.** **Preview zoom no longer enters the cuff (collar always reads closed).** (Owner screenshot:
+  the cuff still looked "open" — arm visible between the side walls — even after A34's 360° collar.)
+  Root cause was NOT geometry: the preview/inspect zoom floor was `INSPECTION_RANGE_METERS.near * 0.6`
+  ≈ 0.091 m from the cuff center, INSIDE the ~0.10 m band ring, so at maximum zoom-in the camera sat
+  inside the collar — the near wall fell behind it and only the left/right walls rendered, reading as a
+  gap. Verified: at the default framing (~0.23 m) and any distance outside the ring the collar is fully
+  closed; only zooming inside produced the gap. Fix (`interaction/inspectionController.ts zoom`): raise
+  the floor to `INSPECTION_RANGE_METERS.near` (the 6-inch SPEC §6 close-inspection bound), keeping the
+  camera outside the ring at all times so the cuff always reads as fully wrapping the arm, while still
+  allowing 6-inch close gauge inspection. Preview/inspect only — AR uses the headset pose, unaffected.
+  Verified headless: at max zoom-in (clamped to 0.152 m) the front is fully covered by band fabric with
+  the label/marker readable, at both loose and snug fit. (If the cuff still appears open in a browser,
+  it is a stale cached preview of a pre-360° build — hard-reload.)

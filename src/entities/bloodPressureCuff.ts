@@ -41,6 +41,12 @@ const CUFF_BAND_ARC_DEG = 300; // arc (deg) the band wraps around the limb
 // Staves approximating the curve. 21 (up from 9) reads as a smooth band at inspection distance while
 // staying a build-time-only cost (a few hundred extra triangles, zero per-frame work).
 const CUFF_BAND_STAVES = 21;
+// How much WIDER (radially) the curved band opens when fully loosened vs. fully cinched. At cinch=0
+// the band's diameter is this factor of its snug diameter (reads as an open cuff slipped over the
+// arm); at cinch=1 it hugs the limb (scale 1). Cosmetic interaction affordance driven by the fit
+// gesture — NOT a clinical value (the snugness pass/fail band stays in trainingConfig.ts). Applied as
+// a radial (X+Z) scale of the wrap body, composed with bladder swell in `applyWrapBodyScale`.
+const WRAP_OPEN_DIAMETER_FACTOR = 1.6;
 
 /**
  * Procedural aneroid gauge tunables (cosmetic; the full-procedural fallback only — the real device
@@ -135,6 +141,13 @@ export class BloodPressureCuff {
   private wrapBody: pc.Entity | null = null;
   /** Base local scale of the wrap body, captured at build time so swell is relative + reversible. */
   private readonly wrapBodyBaseScale = new pc.Vec3(1, 1, 1);
+  /**
+   * Composed wrap-body scale inputs (both feed `applyWrapBodyScale`, so they never fight over the
+   * one node): `bladderSwell01` = inflation puff [0,1]; `wrapCinch01` = fit tightness [0,1] where
+   * 0 is fully OPEN (band diameter widened to slip over the arm) and 1 is fully cinched/snug.
+   */
+  private bladderSwell01 = 0;
+  private wrapCinch01 = 1;
   /** Mesh instances that should receive the hover highlight (the fabric/body). */
   private readonly highlightTargets: pc.MeshInstance[] = [];
   /**
@@ -966,23 +979,49 @@ export class BloodPressureCuff {
   }
 
   /**
-   * Suggest bladder inflation by swelling the fabric body about its base scale. `fraction` in [0,1]
-   * (0 = resting, 1 = fully inflated). Allocation-free; reuses a scratch. Driven by the cuff animator
-   * from the inflation pressure. No-op if the wrap body is absent.
-   *
-   * The swell AXIS depends on the body style so it reads correctly either way:
-   *   - CURVED BAND: bulge RADIALLY (local X+Z) so the band visibly puffs outward around the limb,
-   *     while the along-limb width (local Y) stays ~constant (training-plausible).
-   *   - FLAT SLAB: bulge in THICKNESS (local Y), width/length barely change (original behaviour).
+   * Suggest bladder inflation by swelling the fabric body. `fraction` in [0,1] (0 = resting, 1 =
+   * fully inflated). Driven by the cuff animator from the inflation pressure. Composed with the fit
+   * cinch in `applyWrapBodyScale` so the two never fight over the one wrap-body node.
    */
   setBladderSwell(fraction: number): void {
+    this.bladderSwell01 = fraction < 0 ? 0 : fraction > 1 ? 1 : fraction;
+    this.applyWrapBodyScale();
+  }
+
+  /**
+   * Adjust the curved band's DIAMETER around the arm to represent fit. `cinch` in [0,1]: 0 = fully
+   * OPEN (band widened by `WRAP_OPEN_DIAMETER_FACTOR` so it reads as slipped loosely over the arm),
+   * 1 = fully cinched/snug against the limb. Driven by the cuff animator from the eased tighten
+   * fraction — the same fit adjustment the confirm-fit guided step already validates (no new clinical
+   * rule; the snugness pass/fail band stays in trainingConfig.ts). No visible effect on the flat slab
+   * (a diameter has no meaning off-arm); the value is still stored so a later size/arm rebuild reuses
+   * it. Composed with bladder swell in `applyWrapBodyScale`. Allocation-free.
+   */
+  setWrapCinch(cinch: number): void {
+    this.wrapCinch01 = cinch < 0 ? 0 : cinch > 1 ? 1 : cinch;
+    this.applyWrapBodyScale();
+  }
+
+  /**
+   * Compose the wrap-body local scale from the two inputs (fit cinch + bladder swell) so a single
+   * node carries both — no forked cuff, no per-frame allocation (reuses a scratch).
+   *
+   * The axes depend on the body style so each reads correctly:
+   *   - CURVED BAND: the RADIAL (local X+Z) scale = openness × swell puff, so the diameter opens as
+   *     the learner loosens the fit and puffs a little more as pressure rises; the along-limb width
+   *     (local Y) only nudges with swell. X and Z scale EQUALLY so the arc stays circular.
+   *   - FLAT SLAB: no diameter (off-arm), so cinch is ignored; bulge in THICKNESS (local Y) only, as
+   *     before.
+   */
+  private applyWrapBodyScale(): void {
     const body = this.wrapBody;
     if (!body) return;
-    const f = fraction < 0 ? 0 : fraction > 1 ? 1 : fraction;
+    const f = this.bladderSwell01;
     if (this.wrapIsBand) {
-      // Radial puff up to +18% outward; small length change. (Less than the slab's +45% because the
-      // band's whole radius scales, which is visually stronger.)
-      const sRadial = 1 + 0.18 * f;
+      // Openness: cinch 1 → 1.0 (snug), cinch 0 → WRAP_OPEN_DIAMETER_FACTOR (widened around the arm).
+      const openness = 1 + (1 - this.wrapCinch01) * (WRAP_OPEN_DIAMETER_FACTOR - 1);
+      // Radial puff up to +18% outward on inflation; small along-limb change.
+      const sRadial = openness * (1 + 0.18 * f);
       const sAxial = 1 + 0.02 * f;
       tmp.vecA.set(
         this.wrapBodyBaseScale.x * sRadial,
@@ -990,7 +1029,7 @@ export class BloodPressureCuff {
         this.wrapBodyBaseScale.z * sRadial,
       );
     } else {
-      // Up to +45% thickness at full inflation; width/length barely change.
+      // Up to +45% thickness at full inflation; width/length barely change. Cinch has no meaning here.
       const sy = 1 + 0.45 * f;
       const sxz = 1 + 0.03 * f;
       tmp.vecA.set(

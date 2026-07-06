@@ -37,16 +37,21 @@ const WRAP_OFFSET = new pc.Vec3(0.22, 0, 0.02);
  * `config/trainingConfig.ts` (`CUFF_ON_ARM`); these shape the band geometry itself.
  */
 const CUFF_BAND_CLEARANCE = 0.004; // radial gap (m) between limb surface and band inner face
-const CUFF_BAND_ARC_DEG = 300; // arc (deg) the band wraps around the limb
+// Full 360° wrap: the band is a CLOSED collar that encircles the limb all the way around (a real cuff
+// wraps fully, closing with Velcro). An earlier 300° arc left a ~60° opening that read as a gap —
+// especially once the diameter opens on loosening — so the band never appeared to encompass the arm.
+const CUFF_BAND_ARC_DEG = 360; // arc (deg) the band wraps around the limb — full closed collar
 // Staves approximating the curve. 21 (up from 9) reads as a smooth band at inspection distance while
 // staying a build-time-only cost (a few hundred extra triangles, zero per-frame work).
 const CUFF_BAND_STAVES = 21;
 // How much WIDER (radially) the curved band opens when fully loosened vs. fully cinched. At cinch=0
-// the band's diameter is this factor of its snug diameter (reads as an open cuff slipped over the
-// arm); at cinch=1 it hugs the limb (scale 1). Cosmetic interaction affordance driven by the fit
-// gesture — NOT a clinical value (the snugness pass/fail band stays in trainingConfig.ts). Applied as
-// a radial (X+Z) scale of the wrap body, composed with bladder swell in `applyWrapBodyScale`.
-const WRAP_OPEN_DIAMETER_FACTOR = 1.6;
+// the band's diameter is this factor of its snug diameter (reads as a slightly loosened cuff); at
+// cinch=1 it hugs the limb (scale 1). Kept MODEST so the closed collar stays wrapped around the arm
+// at every fit — a loose cuff still encircles the limb, it just is not cinched. Cosmetic interaction
+// affordance driven by the fit gesture — NOT a clinical value (the snugness pass/fail band stays in
+// trainingConfig.ts). Applied as a radial (X+Z) scale of the wrap body, composed with bladder swell
+// in `applyWrapBodyScale`.
+const WRAP_OPEN_DIAMETER_FACTOR = 1.18;
 
 /**
  * Procedural aneroid gauge tunables (cosmetic; the full-procedural fallback only — the real device

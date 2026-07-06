@@ -577,15 +577,21 @@ Runtime (requires WebXR device/browser — **cannot be verified in this environm
   tolerances) are **untouched**, and fit is still validated exactly as before (`snugness =
   animator.tightenAmount`). Mechanism: `bloodPressureCuff.setWrapCinch(cinch∈[0,1])` scales the wrap
   body RADIALLY (local X+Z, equal so the arc stays circular) by an openness factor — cinch 1 → ×1.0
-  (snug, band inner face ≈ arm surface + clearance), cinch 0 → ×`WRAP_OPEN_DIAMETER_FACTOR` (1.6,
-  band widened to read as slipped loosely over the arm). This composes with bladder swell on the
-  **one** wrap-body node via `applyWrapBodyScale` (no second cuff forked, no per-frame allocation).
-  The `CuffAnimator` drives `setWrapCinch(tightenDisplayed)` each frame from the already-eased tighten
-  fraction — the SAME value the confirm-fit guided step reads — so the on-arm fit read is the band
-  diameter (single owner; direct injection loses to the animator by design). `WRAP_OPEN_DIAMETER_FACTOR`
-  is a cosmetic interaction affordance, NOT a clinical value. On the flat-slab preview (off-arm) cinch
-  is ignored (a diameter has no meaning) and the original beside-the-device tighten translate remains;
-  on the arm the wrap rest offset is ≈0 so that translate is inert. Verified headless: band world-AABB
-  radial extent 0.254 m (open) → 0.227 (mid) → 0.161 (snug), monotonic, axial width preserved, arm
-  stays inside at both extremes; confirm-fit still enters TOO-TIGHT and is satisfied by loosening
-  (`ix-fit`), and pump/valve (`ix-full`) unaffected. On-device AR framing still pending.
+  (snug, band inner face ≈ arm surface + clearance), cinch 0 → ×`WRAP_OPEN_DIAMETER_FACTOR` (1.18,
+  a slightly loosened cuff). This composes with bladder swell on the **one** wrap-body node via
+  `applyWrapBodyScale` (no second cuff forked, no per-frame allocation). The `CuffAnimator` drives
+  `setWrapCinch(tightenDisplayed)` each frame from the already-eased tighten fraction — the SAME value
+  the confirm-fit guided step reads — so the on-arm fit read is the band diameter (single owner; direct
+  injection loses to the animator by design). `WRAP_OPEN_DIAMETER_FACTOR` is a cosmetic interaction
+  affordance, NOT a clinical value. On the flat-slab preview (off-arm) cinch is ignored (a diameter has
+  no meaning) and the original beside-the-device tighten translate remains; on the arm the wrap rest
+  offset is ≈0 so that translate is inert.
+  **Follow-up correction (owner screenshot):** the band is now a **CLOSED collar** — `CUFF_BAND_ARC_DEG`
+  was raised 300° → **360°** so the fabric encircles the limb ALL the way around (a real cuff wraps
+  fully and closes with Velcro), and the open factor was reduced 1.6 → 1.18 so the loosened cuff still
+  hugs the arm rather than gaping off it. Together these fix the earlier look where the ~60° arc opening
+  plus a wide-open diameter read as the cuff not wrapping around. Verified headless (front + both sides +
+  back): the collar fully encircles the arm at every fit and viewing angle; band world-AABB radial
+  extent 0.183 m (open) → 0.174 (mid) → 0.155 (snug), still monotonic, axial width preserved; confirm-fit
+  still enters TOO-TIGHT and is satisfied by loosening (`ix-fit`), and pump/valve (`ix-full`) unaffected.
+  On-device AR framing still pending.

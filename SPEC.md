@@ -569,3 +569,23 @@ Runtime (requires WebXR device/browser — **cannot be verified in this environm
      the same tick it feeds bladder swell from pressure — so cuff and bulb always act together, driven
      by the one pump action (single inflation owner preserved). Verified headless: bulb narrows
      mid-pump and returns to rest on release. No-op in full-procedural fallback (no device GLB).
+- **A34.** **Learner-adjustable cuff diameter around the arm (visible fit).** (Owner request.) The
+  curved fabric band's DIAMETER now opens and cinches around the limb as the learner adjusts fit —
+  wide/open when loose, hugging when snug — so the cuff visibly expands and contracts in
+  circumference. Cosmetic/interaction only; the engine-free training brain and
+  `config/trainingConfig.ts` clinical values (snugness pass/fail band `0.15–0.45`, step order,
+  tolerances) are **untouched**, and fit is still validated exactly as before (`snugness =
+  animator.tightenAmount`). Mechanism: `bloodPressureCuff.setWrapCinch(cinch∈[0,1])` scales the wrap
+  body RADIALLY (local X+Z, equal so the arc stays circular) by an openness factor — cinch 1 → ×1.0
+  (snug, band inner face ≈ arm surface + clearance), cinch 0 → ×`WRAP_OPEN_DIAMETER_FACTOR` (1.6,
+  band widened to read as slipped loosely over the arm). This composes with bladder swell on the
+  **one** wrap-body node via `applyWrapBodyScale` (no second cuff forked, no per-frame allocation).
+  The `CuffAnimator` drives `setWrapCinch(tightenDisplayed)` each frame from the already-eased tighten
+  fraction — the SAME value the confirm-fit guided step reads — so the on-arm fit read is the band
+  diameter (single owner; direct injection loses to the animator by design). `WRAP_OPEN_DIAMETER_FACTOR`
+  is a cosmetic interaction affordance, NOT a clinical value. On the flat-slab preview (off-arm) cinch
+  is ignored (a diameter has no meaning) and the original beside-the-device tighten translate remains;
+  on the arm the wrap rest offset is ≈0 so that translate is inert. Verified headless: band world-AABB
+  radial extent 0.254 m (open) → 0.227 (mid) → 0.161 (snug), monotonic, axial width preserved, arm
+  stays inside at both extremes; confirm-fit still enters TOO-TIGHT and is satisfied by loosening
+  (`ix-fit`), and pump/valve (`ix-full`) unaffected. On-device AR framing still pending.

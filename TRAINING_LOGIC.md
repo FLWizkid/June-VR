@@ -126,7 +126,10 @@ Each item is also flagged `SME-REVIEW:` at its source. None is asserted as clini
    The actual rule is bladder length/width vs. arm circumference (~80% encirclement). Confirm the
    sizing guidance and which size is "right" for the simulated patient.
 6. **Fit tolerance / snugness band** (`TRAINING_TOLERANCES.snugness`) — a simulator affordance chosen
-   for legible XR interaction, not a measured threshold. Confirm acceptable fit feedback.
+   for legible XR interaction, not a measured threshold. Confirm acceptable fit feedback. NOTE: this
+   same fit fraction is now shown VISUALLY as the band's diameter opening/cinching around the arm
+   (SPEC.md A34) — the displayed gap is illustrative, not a measured finger-width, and the pass/fail
+   rule is unchanged (still this band). Confirm what "correct fit" should look like when reviewing.
 7. **Orientation & position tolerances** (`orientationToleranceDeg`, `positionToleranceM`) — affordances
    for XR hand precision, not clinical bands. Confirm placement landmarks (artery marker, 2–3 cm above
    the antecubital fossa, heart level) and acceptable error.

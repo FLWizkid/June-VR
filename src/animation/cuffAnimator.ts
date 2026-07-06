@@ -134,15 +134,25 @@ export class CuffAnimator {
   }
 
   /**
-   * Translate the wrap toward the device (tighten) and lower it slightly, proportional to the
-   * displayed tighten fraction. Subtle: a few centimetres at most. Allocation-free.
+   * Represent the fit adjustment from the displayed tighten fraction. Two effects, both reversible:
+   *   - ON THE ARM: cinch the curved band's DIAMETER around the limb — wide/open when loose, hugging
+   *     when tight — so the learner sees the cuff expand and contract in circumference as they adjust
+   *     fit (the confirm-fit guided step). This is the primary on-arm fit read.
+   *   - FLAT-SLAB PREVIEW (off-arm): the band is centered on the arm axis on-arm (rest x≈0, so the
+   *     translate below is a no-op there); in the beside-the-device preview layout the wrap instead
+   *     slides inward toward the gauge as it tightens, the original subtle behaviour.
+   * Allocation-free.
    */
   private applyWrap(): void {
+    const f = this.tightenDisplayed;
+    // Band diameter: tighten 0 → fully open, tighten 1 → fully cinched/snug. Same fraction the
+    // confirm-fit step validates; no clinical rule changes (see BloodPressureCuff.setWrapCinch).
+    this.cuff.setWrapCinch(f);
+
     const wrap = this.cuff.wrap;
     if (!wrap || !this.wrapRestCaptured) return;
-    const f = this.tightenDisplayed;
-    // Move the open wrap (at rest, offset +X beside the device) inward toward x≈0 as it tightens,
-    // and settle it down a touch in Y. These are small, plausible adjustments.
+    // Move the open wrap (preview layout: offset +X beside the device) inward toward x≈0 as it
+    // tightens, and settle it down a touch in Y. On the arm the rest offset is ~0 so this is inert.
     const x = this.wrapRestPos.x * (1 - 0.85 * f);
     const y = this.wrapRestPos.y - 0.004 * f;
     const z = this.wrapRestPos.z;

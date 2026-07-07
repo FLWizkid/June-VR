@@ -52,6 +52,13 @@ const CUFF_BAND_STAVES = 21;
 // trainingConfig.ts). Applied as a radial (X+Z) scale of the wrap body, composed with bladder swell
 // in `applyWrapBodyScale`.
 const WRAP_OPEN_DIAMETER_FACTOR = 1.18;
+// Learner-driven cuff diameter: the closed 360° collar can be sized bigger/smaller around the arm to
+// fit where/how it is placed. This is the radial (X+Z) multiplier range applied to the snug built
+// radius — min = snug (hugs the limb), max = the largest loose fit. The collar stays a CLOSED ring at
+// every size (uniform radial scale of the full-circle band). Cosmetic interaction affordance — NOT a
+// clinical value (cuff sizing rule / the snugness pass band stay in trainingConfig.ts). Composed with
+// the fit cinch + bladder swell in `applyWrapBodyScale`.
+const WRAP_SIZE_RANGE = { min: 1.0, max: 1.5 } as const;
 
 /**
  * Procedural aneroid gauge tunables (cosmetic; the full-procedural fallback only — the real device
@@ -153,6 +160,13 @@ export class BloodPressureCuff {
    */
   private bladderSwell01 = 0;
   private wrapCinch01 = 1;
+  /**
+   * Learner-chosen cuff diameter as a radial scale of the snug built radius (WRAP_SIZE_RANGE.min..max).
+   * Default = min (snug). Independent of the fit cinch: this is the coarse "how big is the cuff"
+   * control; cinch is the fine snug/loose fit. Both compose in `applyWrapBodyScale`; the collar stays
+   * a closed 360° ring at every size.
+   */
+  private wrapSizeScale: number = WRAP_SIZE_RANGE.min;
   /** Mesh instances that should receive the hover highlight (the fabric/body). */
   private readonly highlightTargets: pc.MeshInstance[] = [];
   /**
@@ -1008,6 +1022,19 @@ export class BloodPressureCuff {
   }
 
   /**
+   * Size the cuff's closed collar bigger/smaller around the arm. `t01` in [0,1]: 0 = smallest (snug,
+   * hugs the limb), 1 = largest (loose). Learner-driven (the "Cuff size" control) so the cuff can be
+   * fitted to the arm depending on where/how it is placed. The collar stays a CLOSED 360° ring at
+   * every size — this only scales its diameter. Composed with the fit cinch + bladder swell in
+   * `applyWrapBodyScale`. No visible effect on the flat slab (off-arm). Allocation-free.
+   */
+  setWrapSize(t01: number): void {
+    const t = t01 < 0 ? 0 : t01 > 1 ? 1 : t01;
+    this.wrapSizeScale = WRAP_SIZE_RANGE.min + (WRAP_SIZE_RANGE.max - WRAP_SIZE_RANGE.min) * t;
+    this.applyWrapBodyScale();
+  }
+
+  /**
    * Compose the wrap-body local scale from the two inputs (fit cinch + bladder swell) so a single
    * node carries both — no forked cuff, no per-frame allocation (reuses a scratch).
    *
@@ -1025,8 +1052,9 @@ export class BloodPressureCuff {
     if (this.wrapIsBand) {
       // Openness: cinch 1 → 1.0 (snug), cinch 0 → WRAP_OPEN_DIAMETER_FACTOR (widened around the arm).
       const openness = 1 + (1 - this.wrapCinch01) * (WRAP_OPEN_DIAMETER_FACTOR - 1);
-      // Radial puff up to +18% outward on inflation; small along-limb change.
-      const sRadial = openness * (1 + 0.18 * f);
+      // Learner size × fit openness × inflation puff. All radial (X+Z) and equal, so the full-circle
+      // band stays a CLOSED ring — it only grows/shrinks in diameter. Along-limb (Y) only puffs.
+      const sRadial = this.wrapSizeScale * openness * (1 + 0.18 * f);
       const sAxial = 1 + 0.02 * f;
       tmp.vecA.set(
         this.wrapBodyBaseScale.x * sRadial,

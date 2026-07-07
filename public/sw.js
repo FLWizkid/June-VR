@@ -10,7 +10,12 @@
  * (Vite content-hashes filenames on every build).
  */
 
-const VERSION = 'june-vr-v1';
+// Bump this on any release that must invalidate previously cached assets. Changing the string makes
+// the browser install a new SW; its `activate` handler deletes every cache whose key != VERSION, so
+// stale precached shell/assets from an earlier build are purged and refetched from the network. This
+// (with network-first HTML) guarantees a client stuck on an old bundle picks up the current build on
+// its next load — the fix for the cuff appearing "open" on already-cached installs.
+const VERSION = 'june-vr-v2';
 const APP_SHELL = [
   '/',
   '/index.html',

@@ -283,6 +283,9 @@ export class ARCuffApplication {
       onElbow: (deg) => {
         this.trainingScene?.setElbowFlexion(deg);
       },
+      onDiameter: (t01) => {
+        this.trainingScene?.setCuffDiameter(t01);
+      },
       onPump: () => {
         this.cuffScene?.pumpBulb();
       },

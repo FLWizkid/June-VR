@@ -608,3 +608,17 @@ Runtime (requires WebXR device/browser — **cannot be verified in this environm
   Verified headless: at max zoom-in (clamped to 0.152 m) the front is fully covered by band fabric with
   the label/marker readable, at both loose and snug fit. (If the cuff still appears open in a browser,
   it is a stale cached preview of a pre-360° build — hard-reload.)
+- **A36.** **Learner-resizable closed-collar diameter.** (Owner request: make the cuff adjustable
+  larger/smaller in diameter around the arm, staying closed, per how/where it is placed.) Adds a
+  learner-driven coarse diameter on top of the fine fit cinch: `bloodPressureCuff.setWrapSize(t01)`
+  maps 0→1 to a radial scale `WRAP_SIZE_RANGE` (1.0 snug → 1.5 largest) that composes with the fit
+  cinch + bladder swell in the single `applyWrapBodyScale` node (no forked cuff, allocation-free). X
+  and Z scale equally on the full-circle (360°) band, so the collar stays a CLOSED ring at every size —
+  it only grows/shrinks in diameter. Exposed as a **"Cuff size" slider** in the controls panel
+  (mirroring the "Elbow" slider), wired `qualityPanel → app.onDiameter → trainingScene.setCuffDiameter
+  → cuffScene.cuff.setWrapSize`. Cosmetic interaction affordance — NOT a clinical value; the cuff
+  sizing rule and the snugness pass band stay SME-governed in trainingConfig.ts, and this does not feed
+  scoring. Verified headless: the real slider is present; `setCuffDiameter` scales the band world-AABB
+  radial extent 0.18 m (100%) → 0.23 (125%) → 0.27 (150%), monotonic; renders show a fully closed
+  collar hugging the arm at the smallest and a larger-but-still-closed ring at the largest; confirm-fit
+  (`ix-fit`) and pump/valve (`ix-full`) still pass. On-device AR framing still pending.

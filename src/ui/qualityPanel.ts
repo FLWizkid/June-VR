@@ -14,12 +14,14 @@ export class QualityPanel {
   private readonly tierRow: HTMLElement;
   private readonly sizeLabel: HTMLElement;
   private readonly elbowLabel: HTMLElement;
+  private readonly diameterLabel: HTMLElement;
   private readonly valveChip: HTMLElement;
 
   private onTier: ((tier: QualityTier) => void) | null = null;
   private onSize: ((size: CuffSize) => void) | null = null;
   private onInflate: (() => void) | null = null;
   private onElbow: ((deg: number) => void) | null = null;
+  private onDiameter: ((t01: number) => void) | null = null;
   private onPump: (() => void) | null = null;
   private onValve: (() => void) | null = null;
 
@@ -95,12 +97,44 @@ export class QualityPanel {
     elbowRow.appendChild(elbowSlider);
     elbowRow.appendChild(this.elbowLabel);
 
+    // Cuff size: live slider that grows/shrinks the closed collar's diameter around the arm, so the
+    // learner can fit it to where/how they place it. 0 = snug (100%), 100 = largest (150%).
+    const diameterRow = document.createElement('div');
+    diameterRow.style.display = 'flex';
+    diameterRow.style.alignItems = 'center';
+    diameterRow.style.gap = '6px';
+    const diameterTitle = document.createElement('span');
+    diameterTitle.textContent = 'Cuff size';
+    diameterTitle.style.font = '600 12px/1 system-ui, sans-serif';
+    const diameterSlider = document.createElement('input');
+    diameterSlider.type = 'range';
+    diameterSlider.min = '0';
+    diameterSlider.max = '100';
+    diameterSlider.step = '1';
+    diameterSlider.value = '0';
+    diameterSlider.style.pointerEvents = 'auto';
+    diameterSlider.style.flex = '1';
+    diameterSlider.style.minWidth = '90px';
+    this.diameterLabel = document.createElement('span');
+    this.diameterLabel.style.opacity = '0.9';
+    this.diameterLabel.style.minWidth = '34px';
+    this.diameterLabel.textContent = '100%';
+    diameterSlider.addEventListener('input', () => {
+      const t = Number(diameterSlider.value) / 100;
+      this.diameterLabel.textContent = `${Math.round(100 + t * 50)}%`;
+      this.onDiameter?.(t);
+    });
+    diameterRow.appendChild(diameterTitle);
+    diameterRow.appendChild(diameterSlider);
+    diameterRow.appendChild(this.diameterLabel);
+
     this.el.appendChild(title);
     this.el.appendChild(this.tierRow);
     this.el.appendChild(sizeRow);
     this.el.appendChild(inflateBtn);
     this.el.appendChild(pumpRow);
     this.el.appendChild(elbowRow);
+    this.el.appendChild(diameterRow);
     getOverlayRoot().appendChild(this.el);
   }
 
@@ -111,6 +145,7 @@ export class QualityPanel {
     onSize: (size: CuffSize) => void;
     onInflate: () => void;
     onElbow: (deg: number) => void;
+    onDiameter: (t01: number) => void;
     onPump: () => void;
     onValve: () => void;
   }): void {
@@ -118,6 +153,7 @@ export class QualityPanel {
     this.onSize = handlers.onSize;
     this.onInflate = handlers.onInflate;
     this.onElbow = handlers.onElbow;
+    this.onDiameter = handlers.onDiameter;
     this.onPump = handlers.onPump;
     this.onValve = handlers.onValve;
   }

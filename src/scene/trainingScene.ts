@@ -182,6 +182,14 @@ export class TrainingScene {
     this.cuffScene.reclampPlacement();
   }
 
+  /**
+   * Size the cuff's closed collar around the arm (learner control). `t01` in [0,1]: 0 = snug/smallest,
+   * 1 = largest. The collar stays a closed ring; only its diameter changes.
+   */
+  setCuffDiameter(t01: number): void {
+    this.cuffScene.cuff.setWrapSize(t01);
+  }
+
   /** True if a real environment GLB loaded (vs procedural stand-in) — for status/README. */
   get environmentIsReal(): boolean {
     return this.environment.isRealModel;
